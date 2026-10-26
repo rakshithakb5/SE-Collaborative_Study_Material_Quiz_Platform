@@ -11,7 +11,7 @@ const { getAuditLog, verifyChain, recordAuditEvent } = require("../services/audi
 const { findById, listUsers, setStatus } = require("../models/userStore");
 const { publicUser } = require("./auth");
 const { sendWarning } = require("../services/notifier");
-const { removeMaterial } = require("./materials");
+const { removeMaterial, getMaterial, listForReview } = require("./materials");
 
 const router = express.Router();
 
@@ -96,6 +96,39 @@ router.post("/materials/:id/remove", requireRole("admin"), (req, res) => {
 
   recordAuditEvent({ actor: actorOf(req), action: "content.remove", target: `material:${material.id}`, reason });
   return res.status(200).json({ removed: true, materialId: material.id });
+});
+
+// GET /api/admin/materials/review-queue
+// Material held back by the plagiarism check (flagged, or scan unavailable).
+router.get("/materials/review-queue", requireRole("admin"), (req, res) => {
+  const items = listForReview().map((m) => ({
+    materialId: m.id,
+    title: m.title,
+    status: m.status,
+    source: "plagiarism-service",
+    reason:
+      m.status === "flagged"
+        ? `Similarity ${Math.round(m.scan.similarity * 100)}% is above the threshold`
+        : "Plagiarism scan unavailable - manual review needed",
+    scan: m.scan,
+  }));
+  res.status(200).json({ count: items.length, items });
+});
+
+// POST /api/admin/materials/:id/approve   { reason }  -> publish after review
+router.post("/materials/:id/approve", requireRole("admin"), (req, res) => {
+  const reason = requireReason(req, res);
+  if (!reason) return;
+
+  const material = getMaterial(req.params.id);
+  if (!material) return res.status(404).json({ error: "Material not found" });
+  if (material.status === "published") {
+    return res.status(409).json({ error: "Material is already published" });
+  }
+
+  material.status = "published";
+  recordAuditEvent({ actor: actorOf(req), action: "content.approve", target: `material:${material.id}`, reason });
+  return res.status(200).json({ materialId: material.id, status: material.status });
 });
 
 module.exports = { router };
