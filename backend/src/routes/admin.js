@@ -12,19 +12,30 @@ const { findById, listUsers, setStatus } = require("../models/userStore");
 const { publicUser } = require("./auth");
 const { sendWarning } = require("../services/notifier");
 const { removeMaterial, getMaterial, listForReview } = require("./materials");
+const { runRetention } = require("../services/retentionJob");
 
 const router = express.Router();
 
 // GET /api/admin/audit-log?action=...&actorId=...&target=...
 router.get("/audit-log", requireRole("admin"), (req, res) => {
-  const { action, actorId, target } = req.query;
-  const log = getAuditLog({ action, actorId, target });
+  const { action, actorId, target, includeArchived } = req.query;
+  const log = getAuditLog({
+    action,
+    actorId,
+    target,
+    includeArchived: includeArchived === "true",
+  });
   res.status(200).json({ count: log.length, entries: log });
 });
 
 // GET /api/admin/audit-log/verify  -> is the log untampered?
 router.get("/audit-log/verify", requireRole("admin"), (req, res) => {
   res.status(200).json(verifyChain());
+});
+
+// POST /api/admin/audit-log/archive  -> run the retention job now
+router.post("/audit-log/archive", requireRole("admin"), (req, res) => {
+  res.status(200).json({ archived: runRetention() });
 });
 
 // Returns the trimmed reason, or sends 400 and returns null.
