@@ -1,5 +1,6 @@
 
 const express = require("express");
+const { requireRole } = require("../middleware/rbac");
 
 const router = express.Router();
 
@@ -16,53 +17,64 @@ function registerQuiz(quizId, quiz) {
 }
 
 // Start a quiz attempt
-router.post("/:quizId/attempts", (req, res) => {
-  const { quizId } = req.params;
-  const { userId } = req.body;
+router.post(
+  "/:quizId/attempts",
+  requireRole("student"),
+  (req, res) => {
+    const { quizId } = req.params;
+    const userId = req.user.id;
 
-  if (!userId) {
-    return res.status(400).json({ error: "userId is required" });
+    if (!userId) {
+      return res.status(400).json({
+        error: "Authenticated user ID is required",
+      });
+    }
+
+    const quiz = quizzes.get(quizId);
+
+    if (!quiz || !quiz.published) {
+      return res.status(404).json({ error: "Published quiz not found" });
+    }
+
+    const key = `${quizId}:${userId}`;
+    const userAttempts = attempts.get(key) || [];
+
+    if (userAttempts.length >= quiz.maxAttempts) {
+      return res.status(403).json({
+        error: "Maximum number of attempts reached",
+      });
+    }
+
+    const startedAt = Date.now();
+
+    const attempt = {
+      id: `${quizId}-${userId}-${userAttempts.length + 1}`,
+      quizId,
+      userId,
+      startedAt,
+      expiresAt: startedAt + quiz.timeLimitSeconds * 1000,
+      status: "in_progress",
+    };
+
+    userAttempts.push(attempt);
+    attempts.set(key, userAttempts);
+
+    return res.status(201).json({ attempt });
   }
-
-  const quiz = quizzes.get(quizId);
-
-  if (!quiz || !quiz.published) {
-    return res.status(404).json({ error: "Published quiz not found" });
-  }
-
-  const key = `${quizId}:${userId}`;
-  const userAttempts = attempts.get(key) || [];
-
-  if (userAttempts.length >= quiz.maxAttempts) {
-    return res.status(403).json({
-      error: "Maximum number of attempts reached",
-    });
-  }
-
-  const startedAt = Date.now();
-
-  const attempt = {
-    id: `${quizId}-${userId}-${userAttempts.length + 1}`,
-    quizId,
-    userId,
-    startedAt,
-    expiresAt: startedAt + quiz.timeLimitSeconds * 1000,
-    status: "in_progress",
-  };
-
-  userAttempts.push(attempt);
-  attempts.set(key, userAttempts);
-
-  return res.status(201).json({ attempt });
-});
+);
 
 // Submit a quiz attempt
-router.post("/:quizId/attempts/:attemptId/submit", (req, res) => {
+router.post(
+  "/:quizId/attempts/:attemptId/submit",
+  requireRole("student"),
+  (req, res) => {
   const { quizId, attemptId } = req.params;
-  const { userId } = req.body;
+  const userId = req.user.id;
 
   if (!userId) {
-    return res.status(400).json({ error: "userId is required" });
+    return res.status(400).json({
+      error: "Authenticated user ID is required",
+    });
   }
 
   const quiz = quizzes.get(quizId);
@@ -162,7 +174,10 @@ return res.status(200).json({ attempt });
 
 });
 
-router.get("/:quizId/leaderboard", (req, res) => {
+router.get(
+  "/:quizId/leaderboard",
+  requireRole("student", "instructor", "admin"),
+  (req, res) => {
     const { quizId } = req.params;
     const quiz = quizzes.get(quizId);
   

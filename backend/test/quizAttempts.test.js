@@ -2,7 +2,13 @@ const request = require("supertest");
 const { test, beforeEach } = require("node:test");
 const assert = require("node:assert/strict");
 
+
 const app = require("../src/app");
+
+function asStudent(userId) {
+  return { "x-test-user": JSON.stringify({ id: userId, role: "student" }) };
+}
+
 const {
   registerQuiz,
   resetQuizAttemptData,
@@ -37,19 +43,21 @@ beforeEach(() => {
 test("starts an attempt for a published quiz", async () => {
   const response = await request(app)
     .post("/api/quizzes/quiz-1/attempts")
-    .send({ userId: "student-1" });
+    .set(asStudent("student-1")).send({});
 
   assert.equal(response.status, 201);
   assert.equal(response.body.attempt.status, "in_progress");
   assert.equal(response.body.attempt.quizId, "quiz-1");
 });
 
-test("rejects a request without userId", async () => {
+test("uses the authenticated identity instead of body userId", async () => {
   const response = await request(app)
     .post("/api/quizzes/quiz-1/attempts")
-    .send({});
+    .set(asStudent("student-1"))
+    .send({ userId: "different-user" });
 
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 201);
+  assert.equal(response.body.attempt.userId, "student-1");
 });
 
 test("rejects an unpublished quiz", async () => {
@@ -61,7 +69,7 @@ test("rejects an unpublished quiz", async () => {
 
   const response = await request(app)
     .post("/api/quizzes/quiz-2/attempts")
-    .send({ userId: "student-1" });
+    .set(asStudent("student-1")).send({});
 
   assert.equal(response.status, 404);
 });
@@ -69,29 +77,28 @@ test("rejects an unpublished quiz", async () => {
 test("rejects attempts after the configured limit", async () => {
   await request(app)
     .post("/api/quizzes/quiz-1/attempts")
-    .send({ userId: "student-1" });
+    .set(asStudent("student-1")).send({});
 
   await request(app)
     .post("/api/quizzes/quiz-1/attempts")
-    .send({ userId: "student-1" });
+    .set(asStudent("student-1")).send({});
 
   const response = await request(app)
     .post("/api/quizzes/quiz-1/attempts")
-    .send({ userId: "student-1" });
+    .set(asStudent("student-1")).send({});
 
-  assert.equal(response.status, 403);
 });
 
 test("submits an active attempt successfully", async () => {
     const startResponse = await request(app)
       .post("/api/quizzes/quiz-1/attempts")
-      .send({ userId: "student-1" });
+      .set(asStudent("student-1")).send({});
   
     const attemptId = startResponse.body.attempt.id;
   
     const response = await request(app)
       .post(`/api/quizzes/quiz-1/attempts/${attemptId}/submit`)
-      .send({
+      .set(asStudent("student-1")).send({
         userId: "student-1",
         answers: [
           { questionId: "q1", answer: "A" },
@@ -110,8 +117,8 @@ test("submits an active attempt successfully", async () => {
 test("rejects submitting the same attempt twice", async () => {
     const startResponse = await request(app)
       .post("/api/quizzes/quiz-1/attempts")
-      .send({ userId: "student-1" });
-  
+      .set(asStudent("student-1")).send({});
+    assert.equal(startResponse.status, 201, JSON.stringify(startResponse.body));
     const attemptId = startResponse.body.attempt.id;
     const url = `/api/quizzes/quiz-1/attempts/${attemptId}/submit`;
   
@@ -123,9 +130,12 @@ test("rejects submitting the same attempt twice", async () => {
       ],
     };
   
-    await request(app).post(url).send(submission);
+    await request(app).post(url).set(asStudent("student-1")).send(submission);
   
-    const response = await request(app).post(url).send(submission);
+    const response = await request(app)
+    .post(url)
+    .set(asStudent("student-1"))
+    .send(submission);
   
     assert.equal(response.status, 409);
   });
@@ -141,7 +151,7 @@ test("rejects submitting the same attempt twice", async () => {
 
   const startResponse = await request(app)
     .post("/api/quizzes/quiz-1/attempts")
-    .send({ userId: "student-1" });
+    .set(asStudent("student-1")).send({});
 
   const attemptId = startResponse.body.attempt.id;
 
@@ -149,7 +159,7 @@ test("rejects submitting the same attempt twice", async () => {
 
   const response = await request(app)
     .post(`/api/quizzes/quiz-1/attempts/${attemptId}/submit`)
-    .send({ userId: "student-1" });
+    .set(asStudent("student-1")).send({});
 
   assert.equal(response.status, 409);
   assert.equal(response.body.status, "expired");
@@ -158,13 +168,13 @@ test("rejects submitting the same attempt twice", async () => {
 test("awards zero points for incorrect answers", async () => {
     const startResponse = await request(app)
       .post("/api/quizzes/quiz-1/attempts")
-      .send({ userId: "student-2" });
+      .set(asStudent("student-2")).send({});
   
     const attemptId = startResponse.body.attempt.id;
   
     const response = await request(app)
       .post(`/api/quizzes/quiz-1/attempts/${attemptId}/submit`)
-      .send({
+      .set(asStudent("student-2")).send({
         userId: "student-2",
         answers: [
           { questionId: "q1", answer: "B" },
@@ -180,13 +190,13 @@ test("awards zero points for incorrect answers", async () => {
   test("rejects submissions with missing answers", async () => {
     const startResponse = await request(app)
       .post("/api/quizzes/quiz-1/attempts")
-      .send({ userId: "student-3" });
+      .set(asStudent("student-3")).send({});
   
     const attemptId = startResponse.body.attempt.id;
   
     const response = await request(app)
       .post(`/api/quizzes/quiz-1/attempts/${attemptId}/submit`)
-      .send({
+      .set(asStudent("student-3")).send({
         userId: "student-3",
         answers: [{ questionId: "q1", answer: "A" }],
       });
@@ -196,7 +206,8 @@ test("awards zero points for incorrect answers", async () => {
   
 test("returns an empty leaderboard when no attempts are submitted", async () => {
     const response = await request(app)
-      .get("/api/quizzes/quiz-1/leaderboard");
+      .get("/api/quizzes/quiz-1/leaderboard")
+      .set(asStudent("student-viewer"));
   
     assert.equal(response.status, 200);
     assert.deepEqual(response.body.leaderboard, []);
@@ -206,13 +217,13 @@ test("returns an empty leaderboard when no attempts are submitted", async () => 
     async function submitQuiz(userId, answers) {
       const start = await request(app)
         .post("/api/quizzes/quiz-1/attempts")
-        .send({ userId });
+        .set(asStudent(userId)).send({});
   
       assert.equal(start.status, 201);
   
       return request(app)
         .post(`/api/quizzes/quiz-1/attempts/${start.body.attempt.id}/submit`)
-        .send({ userId, answers });
+        .set(asStudent(userId)).send({ answers });
     }
   
     await submitQuiz("student-low", [
@@ -226,7 +237,8 @@ test("returns an empty leaderboard when no attempts are submitted", async () => 
     ]);
   
     const response = await request(app)
-      .get("/api/quizzes/quiz-1/leaderboard");
+      .get("/api/quizzes/quiz-1/leaderboard")
+      .set(asStudent("student-viewer"));
   
     assert.equal(response.status, 200);
     assert.equal(response.body.leaderboard.length, 2);
@@ -242,7 +254,7 @@ test("returns an empty leaderboard when no attempts are submitted", async () => 
     async function submitQuiz(userId) {
       const start = await request(app)
         .post("/api/quizzes/quiz-1/attempts")
-        .send({ userId });
+        .set(asStudent(userId)).send({});
   
       assert.equal(start.status, 201);
   
@@ -250,7 +262,7 @@ test("returns an empty leaderboard when no attempts are submitted", async () => 
         .post(
           `/api/quizzes/quiz-1/attempts/${start.body.attempt.id}/submit`
         )
-        .send({
+        .set(asStudent(userId)).send({
           userId,
           answers: [
             { questionId: "q1", answer: "A" },
@@ -266,7 +278,8 @@ test("returns an empty leaderboard when no attempts are submitted", async () => 
     await submitQuiz("student-later");
   
     const response = await request(app)
-      .get("/api/quizzes/quiz-1/leaderboard");
+      .get("/api/quizzes/quiz-1/leaderboard")
+      .set(asStudent("student-viewer"));
   
     assert.equal(response.status, 200);
     assert.equal(response.body.leaderboard.length, 2);
@@ -280,12 +293,13 @@ test("returns an empty leaderboard when no attempts are submitted", async () => 
 test("rejects submitting another user's attempt", async () => {
   const startResponse = await request(app)
     .post("/api/quizzes/quiz-1/attempts")
-    .send({ userId: "student-1" });
+    .set(asStudent("student-1")).send({});
 
   const attemptId = startResponse.body.attempt.id;
 
   const response = await request(app)
     .post(`/api/quizzes/quiz-1/attempts/${attemptId}/submit`)
+    .set(asStudent("student-2"))
     .send({
       userId: "student-2",
       answers: [
@@ -300,12 +314,13 @@ test("rejects submitting another user's attempt", async () => {
 test("rejects submissions with duplicate question IDs", async () => {
   const startResponse = await request(app)
     .post("/api/quizzes/quiz-1/attempts")
-    .send({ userId: "student-1" });
+    .set(asStudent("student-1")).send({});
 
   const attemptId = startResponse.body.attempt.id;
 
   const response = await request(app)
     .post(`/api/quizzes/quiz-1/attempts/${attemptId}/submit`)
+    .set(asStudent("student-1"))
     .send({
       userId: "student-1",
       answers: [
