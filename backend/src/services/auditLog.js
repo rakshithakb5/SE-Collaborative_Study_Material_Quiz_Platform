@@ -8,8 +8,16 @@
 
 const crypto = require("node:crypto");
 
+// Retention (CSQ-NF-004): entries are kept for at least 2 years. After that
+// they are MOVED to an archive (cold storage in production), never deleted,
+// so the hash chain stays complete and the archive can still be searched.
+const RETENTION_DAYS = 730;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const GENESIS_HASH = "0".repeat(64);
-const entries = [];
+const entries = []; // active log
+const archive = []; // entries older than the retention period
+let nextSeq = 1;
 
 function computeHash(entry) {
   const body = JSON.stringify({
@@ -41,9 +49,9 @@ function recordAuditEvent({ actor, action, target, reason }) {
     throw new TypeError("Audit event needs an actor with an id");
   }
 
-  const previous = entries[entries.length - 1];
+  const previous = entries[entries.length - 1] || archive[archive.length - 1];
   const entry = {
-    seq: entries.length + 1,
+    seq: nextSeq++,
     timestamp: new Date().toISOString(),
     actor: {
       id: String(actor.id),
@@ -62,17 +70,35 @@ function recordAuditEvent({ actor, action, target, reason }) {
 }
 
 // Returns copies, so callers cannot change the stored log.
-function getAuditLog({ action, actorId, target } = {}) {
-  return entries
+// includeArchived: true also searches entries moved to the archive.
+function getAuditLog({ action, actorId, target, includeArchived } = {}) {
+  const source = includeArchived ? [...archive, ...entries] : entries;
+  return source
     .filter((e) => !action || e.action === action)
     .filter((e) => !actorId || e.actor.id === actorId)
     .filter((e) => !target || e.target === target)
     .map((e) => structuredClone(e));
 }
 
-// Checks a list of entries (the stored log by default).
-// Returns { valid: true } or { valid: false, brokenAtSeq }.
-function verifyChain(list = entries) {
+// Moves entries older than the retention period into the archive.
+// Returns how many were moved. Nothing is deleted.
+function archiveExpired(now = Date.now()) {
+  const cutoff = now - RETENTION_DAYS * DAY_MS;
+  let moved = 0;
+  while (entries.length && Date.parse(entries[0].timestamp) < cutoff) {
+    archive.push(entries.shift());
+    moved++;
+  }
+  return moved;
+}
+
+function getArchiveSize() {
+  return archive.length;
+}
+
+// Checks a list of entries (the whole stored log - archive plus active - by
+// default). Returns { valid: true, count } or { valid: false, brokenAtSeq }.
+function verifyChain(list = [...archive, ...entries]) {
   let expectedPrev = GENESIS_HASH;
   for (const entry of list) {
     if (entry.prevHash !== expectedPrev || entry.hash !== computeHash(entry)) {
@@ -86,11 +112,24 @@ function verifyChain(list = entries) {
 // For tests only: start with an empty log.
 function resetAuditLog() {
   entries.length = 0;
+  archive.length = 0;
+  nextSeq = 1;
+}
+
+// Logs an ordinary user activity (upload, quiz attempt) for CSQ-NF-004.
+// Never put credentials or quiz answers in `reason`.
+function recordActivity(user, action, target, reason) {
+  if (!user || !user.id) return null; // not logged in: nothing to attribute
+  return recordAuditEvent({ actor: user, action, target, reason });
 }
 
 module.exports = {
+  RETENTION_DAYS,
   recordAuditEvent,
+  recordActivity,
   getAuditLog,
+  archiveExpired,
+  getArchiveSize,
   verifyChain,
   resetAuditLog,
 };

@@ -1,5 +1,6 @@
 const express = require("express");
 const { requireRole } = require("../middleware/rbac");
+const { recordActivity } = require("../services/auditLog");
 const {
   quizzes,
   attempts,
@@ -306,6 +307,7 @@ router.post("/:quizId/attempts", requireRole("student"), (req, res) => {
 
   userAttempts.push(attempt);
   attempts.set(key, userAttempts);
+  recordActivity(req.user, "quiz.attempt.start", `quiz:${quizId}`, "Quiz attempt started");
 
   return res.status(201).json({ attempt });
 });
@@ -427,6 +429,7 @@ router.post(
     attempt.score = score;
     attempt.maxScore = maxScore;
     attempt.results = results;
+    recordActivity(req.user, "quiz.attempt.submit", `quiz:${attempt.quizId}`, "Quiz attempt submitted");
 
     return res.status(200).json({ attempt });
   }

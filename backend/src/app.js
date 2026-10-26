@@ -77,6 +77,7 @@ app.get("/api/health", (req, res) => {
 });
 
 if (require.main === module) {
+  require("./services/retentionJob").startRetentionJob();
   app.listen(PORT, () => {
     console.log(`Backend server running on port ${PORT}`);
   });

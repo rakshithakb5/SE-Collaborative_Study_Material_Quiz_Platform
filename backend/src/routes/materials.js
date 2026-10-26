@@ -6,6 +6,7 @@ const {
 
 const crypto = require("node:crypto");
 const { scanDocument } = require("../services/plagiarismService");
+const { recordActivity } = require("../services/auditLog");
 
 const router = express.Router();
 const materials = new Map();
@@ -83,6 +84,7 @@ router.post("/", requireRole("instructor", "admin"), async (req, res) => {
   createMaterial(id, { title: title.trim(), content });
   const material = materials.get(id);
   await screenMaterial(material, content);
+  recordActivity(req.user, "material.upload", `material:${id}`, "Material uploaded");
 
   return res.status(201).json({
     materialId: id,
