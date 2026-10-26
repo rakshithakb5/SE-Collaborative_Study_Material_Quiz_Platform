@@ -13,6 +13,7 @@ const {
 } = require("./routes/materials");
 const questionBankRouter = require("./routes/questionBank");
 const { router: authRouter } = require("./routes/auth");
+const { authenticate } = require("./middleware/authenticate");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -34,6 +35,8 @@ if (process.env.NODE_ENV === "test") {
     next();
   });
 }
+
+app.use(authenticate);
 
 if (process.env.PERFORMANCE_TEST_MODE === "true") {
   registerQuiz("performance-quiz", {
