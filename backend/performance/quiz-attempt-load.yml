@@ -1,0 +1,42 @@
+
+config:
+  target: "http://localhost:5001"
+  processor: "./load-processor.js"
+  phases:
+    - duration: 30
+      arrivalRate: 10
+      name: "Load test - 10 users per second"
+    - duration: 30
+      arrivalRate: 25
+      name: "Load test - 25 users per second"
+    - duration: 30
+      arrivalRate: 50
+      name: "Load test - 50 users per second"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "Start and submit a quiz attempt"
+    flow:
+      - function: "generateUniqueUser"
+      - post:
+          url: "/api/quizzes/performance-quiz/attempts"
+          json:
+            userId: "{{ userId }}"
+          capture:
+            - json: "$.attempt.id"
+              as: "attemptId"
+          expect:
+            - statusCode: 201
+      - post:
+          url: "/api/quizzes/performance-quiz/attempts/{{ attemptId }}/submit"
+          json:
+            userId: "{{ userId }}"
+            answers:
+              - questionId: "q1"
+                answer: "A"
+              - questionId: "q2"
+                answer: true
+          expect:
+            - statusCode: 200
