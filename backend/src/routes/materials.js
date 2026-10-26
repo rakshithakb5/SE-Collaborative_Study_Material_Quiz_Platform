@@ -41,7 +41,7 @@ router.post(
 
     const material = materials.get(materialId);
 
-    if (!material) {
+    if (!material || material.removed) {
       return res.status(404).json({ error: "Material not found" });
     }
 
@@ -64,7 +64,7 @@ router.get(
   (req, res) => {
     const material = materials.get(req.params.materialId);
 
-    if (!material) {
+    if (!material || material.removed) {
       return res.status(404).json({ error: "Material not found" });
     }
 
@@ -83,7 +83,7 @@ router.get(
   (req, res) => {
     const material = materials.get(req.params.materialId);
 
-    if (!material) {
+    if (!material || material.removed) {
       return res.status(404).json({ error: "Material not found" });
     }
 
@@ -111,14 +111,19 @@ router.get(
   }
 );
 
-module.exports = {
-  router,
-  createMaterial,
-  resetMaterialData,
-};
+// CSQ-F-062: admin content removal. The material is kept (so the audit trail
+// still points at something) but is hidden from every read route.
+function removeMaterial(materialId) {
+  const material = materials.get(materialId);
+  if (!material || material.removed) return null;
+  material.removed = true;
+  material.removedAt = new Date().toISOString();
+  return material;
+}
 
 module.exports = {
   router,
   createMaterial,
+  removeMaterial,
   resetMaterialData,
 };

@@ -13,6 +13,17 @@ function sendVerificationEmail(user) {
   return true;
 }
 
+// CSQ-F-062: an admin warning to a user (reason is included in the message).
+function sendWarning(user, reason) {
+  outbox.push({
+    to: user.email,
+    type: "warning",
+    reason,
+    sentAt: new Date().toISOString(),
+  });
+  return true;
+}
+
 function getOutbox() {
   return outbox.slice();
 }
@@ -23,6 +34,7 @@ function resetOutbox() {
 
 module.exports = {
   sendVerificationEmail,
+  sendWarning,
   getOutbox,
   resetOutbox,
 };

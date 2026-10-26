@@ -35,6 +35,15 @@ function createUser({ email, passwordHash, role }) {
   return user;
 }
 
+function listUsers() {
+  return Array.from(users.values());
+}
+
+function setStatus(user, status) {
+  user.status = status;
+  return user;
+}
+
 function resetUsers() {
   users.clear();
 }
@@ -43,5 +52,7 @@ module.exports = {
   createUser,
   findByEmail,
   findById,
+  listUsers,
+  setStatus,
   resetUsers,
 };
