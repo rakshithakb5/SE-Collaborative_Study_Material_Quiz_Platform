@@ -12,6 +12,7 @@ const {
   router: materialsRouter,
 } = require("./routes/materials");
 const questionBankRouter = require("./routes/questionBank");
+const { router: authRouter } = require("./routes/auth");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -61,6 +62,7 @@ if (process.env.PERFORMANCE_TEST_MODE === "true") {
 app.use("/api/quizzes", quizAttemptsRouter);
 app.use("/api/materials", materialsRouter);
 app.use("/api/question-bank", questionBankRouter);
+app.use("/api/auth", authRouter);
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
