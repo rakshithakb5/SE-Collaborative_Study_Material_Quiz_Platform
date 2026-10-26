@@ -13,6 +13,7 @@ const {
 } = require("./routes/materials");
 const questionBankRouter = require("./routes/questionBank");
 const { router: authRouter } = require("./routes/auth");
+const { router: adminRouter } = require("./routes/admin");
 const { authenticate } = require("./middleware/authenticate");
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -66,6 +67,7 @@ app.use("/api/quizzes", quizAttemptsRouter);
 app.use("/api/materials", materialsRouter);
 app.use("/api/question-bank", questionBankRouter);
 app.use("/api/auth", authRouter);
+app.use("/api/admin", adminRouter);
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
