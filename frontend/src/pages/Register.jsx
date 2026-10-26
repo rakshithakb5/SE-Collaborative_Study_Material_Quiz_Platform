@@ -1,15 +1,32 @@
 import React, { useState } from 'react';
+import { postJson } from '../api.js';
 
 const Register = () => {
-  const [formData, setFormData] = useState({ username: '', email: '', password: '' });
+  const [formData, setFormData] = useState({ email: '', password: '', role: 'student' });
+  const [message, setMessage] = useState(null); // { type: 'success' | 'error', text }
+  const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Register Data:', formData);
+    setSubmitting(true);
+    setMessage(null);
+
+    const { ok, data } = await postJson('/api/auth/register', formData);
+
+    if (ok) {
+      setMessage({
+        type: 'success',
+        text: `Account created for ${data.email}. A verification email has been sent. You can now log in.`,
+      });
+      setFormData({ email: '', password: '', role: formData.role });
+    } else {
+      setMessage({ type: 'error', text: data.error || 'Registration failed' });
+    }
+    setSubmitting(false);
   };
 
   return (
@@ -17,19 +34,29 @@ const Register = () => {
       <h2>Register / Sign Up</h2>
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '10px' }}>
-          <label>Username: </label>
-          <input type="text" name="username" value={formData.username} onChange={handleChange} required />
-        </div>
-        <div style={{ marginBottom: '10px' }}>
           <label>Email: </label>
           <input type="email" name="email" value={formData.email} onChange={handleChange} required />
         </div>
         <div style={{ marginBottom: '10px' }}>
-          <label>Password: </label>
-          <input type="password" name="password" value={formData.password} onChange={handleChange} required />
+          <label>Password (min 8 characters): </label>
+          <input type="password" name="password" value={formData.password} onChange={handleChange} minLength={8} required />
         </div>
-        <button type="submit">Register</button>
+        <div style={{ marginBottom: '10px' }}>
+          <label>Role: </label>
+          <select name="role" value={formData.role} onChange={handleChange}>
+            <option value="student">Student</option>
+            <option value="instructor">Instructor</option>
+          </select>
+        </div>
+        <button type="submit" disabled={submitting}>
+          {submitting ? 'Registering...' : 'Register'}
+        </button>
       </form>
+      {message && (
+        <p role="status" style={{ color: message.type === 'success' ? 'green' : 'crimson' }}>
+          {message.text}
+        </p>
+      )}
     </div>
   );
 };
