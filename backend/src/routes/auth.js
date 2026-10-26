@@ -7,6 +7,12 @@ const { hashPassword, verifyPassword } = require("../utils/password");
 const { signToken, TOKEN_LIFETIME_SECONDS } = require("../utils/jwt");
 const { createUser, findByEmail, findById } = require("../models/userStore");
 const { sendVerificationEmail } = require("../services/notifier");
+const {
+  isLocked,
+  minutesRemaining,
+  recordFailure,
+  recordSuccess,
+  } = require("../services/loginLockout");
 
 const router = express.Router();
 
@@ -68,6 +74,13 @@ router.post("/register", async (req, res) => {
   });
 });
 
+function lockedResponse(res, user) {
+  return res.status(423).json({
+    error: `Account locked. Try again in ${minutesRemaining(user)} minute(s).`,
+    lockedUntil: new Date(user.lockedUntil).toISOString(),
+  });
+}
+
 router.post("/login", async (req, res) => {
   const { email, password } = req.body || {};
 
@@ -76,17 +89,29 @@ router.post("/login", async (req, res) => {
   }
 
   const user = findByEmail(email);
+
+  // CSQ-F-003: a locked account is refused before the password is checked,
+  // so even the correct password does not work until the lock expires.
+  if (user && isLocked(user)) {
+    return lockedResponse(res, user);
+  }
+
   const hash = user ? user.passwordHash : await getDummyHash();
   const passwordOk = await verifyPassword(password, hash);
 
   // Same message for "unknown email" and "wrong password" on purpose.
   if (!user || !passwordOk) {
+    if (user && recordFailure(user).locked) {
+      return lockedResponse(res, user);
+    }
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
   if (user.status !== "active") {
     return res.status(403).json({ error: "Account is not active" });
   }
+
+  recordSuccess(user);
 
   return res.status(200).json({
     token: signToken(user),

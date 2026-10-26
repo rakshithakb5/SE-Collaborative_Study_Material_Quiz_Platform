@@ -27,6 +27,8 @@ function createUser({ email, passwordHash, role }) {
     passwordHash, // bcrypt hash only - never the plaintext password
     role,
     status: "active",
+    failedLoginCount: 0, // consecutive failed logins (CSQ-F-003)
+    lockedUntil: null, // timestamp in ms while the account is locked
     createdAt: new Date().toISOString(),
   };
   users.set(user.email, user);
