@@ -295,6 +295,7 @@ test("rejects submitting another user's attempt", async () => {
     .post("/api/quizzes/quiz-1/attempts")
     .set(asStudent("student-1")).send({});
 
+  assert.equal(startResponse.status, 201, JSON.stringify(startResponse.body));
   const attemptId = startResponse.body.attempt.id;
 
   const response = await request(app)
@@ -316,6 +317,7 @@ test("rejects submissions with duplicate question IDs", async () => {
     .post("/api/quizzes/quiz-1/attempts")
     .set(asStudent("student-1")).send({});
 
+  assert.equal(startResponse.status, 201, JSON.stringify(startResponse.body));
   const attemptId = startResponse.body.attempt.id;
 
   const response = await request(app)
@@ -331,4 +333,53 @@ test("rejects submissions with duplicate question IDs", async () => {
     });
 
   assert.equal(response.status, 400);
+});
+test("instructor cannot start a student-only quiz attempt", async () => {
+  const response = await request(app)
+    .post("/api/quizzes/quiz-1/attempts")
+    .set(
+      "x-test-user",
+      JSON.stringify({ id: "instructor-1", role: "instructor" })
+    )
+    .send({});
+
+  assert.equal(response.status, 403);
+});
+
+test("admin cannot start a student-only quiz attempt", async () => {
+  const response = await request(app)
+    .post("/api/quizzes/quiz-1/attempts")
+    .set(
+      "x-test-user",
+      JSON.stringify({ id: "admin-1", role: "admin" })
+    )
+    .send({});
+
+  assert.equal(response.status, 403);
+});
+
+test("instructor cannot submit a student's quiz attempt", async () => {
+  const startResponse = await request(app)
+    .post("/api/quizzes/quiz-1/attempts")
+    .set(asStudent("student-1"))
+    .send({});
+
+  assert.equal(startResponse.status, 201);
+
+  const attemptId = startResponse.body.attempt.id;
+
+  const response = await request(app)
+    .post(`/api/quizzes/quiz-1/attempts/${attemptId}/submit`)
+    .set(
+      "x-test-user",
+      JSON.stringify({ id: "instructor-1", role: "instructor" })
+    )
+    .send({
+      answers: [
+        { questionId: "q1", answer: "A" },
+        { questionId: "q2", answer: true },
+      ],
+    });
+
+  assert.equal(response.status, 403);
 });

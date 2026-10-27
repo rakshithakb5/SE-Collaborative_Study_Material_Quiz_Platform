@@ -1,4 +1,3 @@
-
 const express = require("express");
 const dotenv = require("dotenv");
 
@@ -8,17 +7,17 @@ const {
   router: quizAttemptsRouter,
   registerQuiz,
 } = require("./routes/quizAttempts");
-const {
-  router: materialsRouter,
-} = require("./routes/materials");
+const { router: materialsRouter } = require("./routes/materials");
 const questionBankRouter = require("./routes/questionBank");
 const { router: authRouter } = require("./routes/auth");
 const { router: adminRouter } = require("./routes/admin");
 const { authenticate } = require("./middleware/authenticate");
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
+
 if (process.env.NODE_ENV === "test") {
   app.use((req, res, next) => {
     const testUser = req.get("x-test-user");
@@ -45,18 +44,8 @@ if (process.env.PERFORMANCE_TEST_MODE === "true") {
     maxAttempts: 10,
     timeLimitSeconds: 1800,
     questions: [
-      {
-        id: "q1",
-        type: "mcq",
-        correctAnswer: "A",
-        points: 1,
-      },
-      {
-        id: "q2",
-        type: "true_false",
-        correctAnswer: true,
-        points: 1,
-      },
+      { id: "q1", type: "mcq", correctAnswer: "A", points: 1 },
+      { id: "q2", type: "true_false", correctAnswer: true, points: 1 },
     ],
   });
 
@@ -78,6 +67,7 @@ app.get("/api/health", (req, res) => {
 
 if (require.main === module) {
   require("./services/retentionJob").startRetentionJob();
+
   app.listen(PORT, () => {
     console.log(`Backend server running on port ${PORT}`);
   });
