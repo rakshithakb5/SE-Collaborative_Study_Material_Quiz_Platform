@@ -102,4 +102,107 @@ test("downloads a specific material version", async () => {
   
     assert.equal(response.status, 404);
   });
-  
+
+test("lists materials for an authenticated student", async () => {
+  const response = await request(app)
+    .get("/api/materials")
+    .set("x-test-user", JSON.stringify(student));
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.materials.length, 1);
+  assert.equal(response.body.materials[0].id, "material-1");
+  assert.equal(response.body.materials[0].title, "DBMS Notes");
+  assert.equal(response.body.materials[0].latestVersion, 1);
+  assert.equal("content" in response.body.materials[0], false);
+});
+
+test("rejects unauthenticated material listing", async () => {
+  const response = await request(app).get("/api/materials");
+
+  assert.equal(response.status, 401);
+});
+
+test("allows an instructor to create a material", async () => {
+  const response = await request(app)
+    .post("/api/materials")
+    .set("x-test-user", JSON.stringify(instructor))
+    .send({
+      id: "material-2",
+      title: "Operating Systems Notes",
+      subject: "CSE",
+      topic: "Processes",
+      content: "Process scheduling notes",
+    });
+
+  assert.equal(response.status, 201);
+  assert.equal(response.body.material.id, "material-2");
+
+  const list = await request(app)
+    .get("/api/materials")
+    .set("x-test-user", JSON.stringify(student));
+
+  assert.equal(list.status, 200);
+  assert.equal(list.body.materials.length, 2);
+});
+
+test("rejects a student from creating a material", async () => {
+  const response = await request(app)
+    .post("/api/materials")
+    .set("x-test-user", JSON.stringify(student))
+    .send({
+      id: "material-2",
+      title: "Unauthorized Notes",
+      content: "Content",
+    });
+
+  assert.equal(response.status, 403);
+});
+
+test("rejects invalid material creation data", async () => {
+  const response = await request(app)
+    .post("/api/materials")
+    .set("x-test-user", JSON.stringify(instructor))
+    .send({ id: "material-2", title: "Missing content" });
+
+  assert.equal(response.status, 400);
+});
+
+test("rejects duplicate material IDs", async () => {
+  const response = await request(app)
+    .post("/api/materials")
+    .set("x-test-user", JSON.stringify(instructor))
+    .send({
+      id: "material-1",
+      title: "Duplicate",
+      content: "Some content",
+    });
+
+  assert.equal(response.status, 409);
+});
+test("allows an admin to read materials", async () => {
+  const response = await request(app)
+    .get("/api/materials")
+    .set(
+      "x-test-user",
+      JSON.stringify({ id: "admin-1", role: "admin" })
+    );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.body.materials.length, 1);
+});
+
+test("allows an admin to create a material", async () => {
+  const response = await request(app)
+    .post("/api/materials")
+    .set(
+      "x-test-user",
+      JSON.stringify({ id: "admin-1", role: "admin" })
+    )
+    .send({
+      id: "admin-material-1",
+      title: "Admin Test Material",
+      content: "Test content",
+    });
+
+  assert.equal(response.status, 201);
+});
