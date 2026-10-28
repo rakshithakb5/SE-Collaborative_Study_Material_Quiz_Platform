@@ -67,6 +67,11 @@ app.get("/api/health", (req, res) => {
 
 if (require.main === module) {
   require("./services/retentionJob").startRetentionJob();
+  if (process.env.SEED_DEMO === "true") {
+    require("./services/demoSeed")
+      .seedDemoData()
+      .then(() => console.log("Demo accounts and material created (SEED_DEMO=true)."));
+  }
 
   app.listen(PORT, () => {
     console.log(`Backend server running on port ${PORT}`);
