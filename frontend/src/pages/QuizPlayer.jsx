@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { quizData } from '../data/quizData';
 
 export default function QuizPlayer({ availableQuizzes = [] }) {
   const [selectedQuizId, setSelectedQuizId] = useState('');
@@ -147,7 +148,20 @@ export default function QuizPlayer({ availableQuizzes = [] }) {
       <h2 style={{ color: '#27ae60', marginTop: 0 }}>Interactive Quiz Player (Settings Enforcement)</h2>
 
       {publishedQuizzes.length === 0 ? (
-        <p style={{ color: '#666' }}>No published quizzes available. Create and publish a quiz using the Quiz Creator above.</p>
+        <div>
+          <p style={{ color: '#666' }}>No published quizzes available. Showing fallback dummy data:</p>
+          {quizData.map((item) => (
+            <div key={item.id} style={{ marginBottom: '20px', padding: '15px', border: '1px solid #ccc', borderRadius: '5px', background: '#fff' }}>
+              <h4>{item.id}. {item.question}</h4>
+              <ul>
+                {item.options.map((option, index) => (
+                  <li key={index}>{option}</li>
+                ))}
+              </ul>
+              <p><strong>Correct Answer:</strong> {item.answer}</p>
+            </div>
+          ))}
+        </div>
       ) : (
         <div>
           {/* Quiz Selection & Settings Display */}
