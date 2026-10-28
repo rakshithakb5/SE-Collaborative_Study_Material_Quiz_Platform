@@ -1,95 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { quizData } from '../data/quizData';
 
 export default function QuizPlayer({ availableQuizzes = [] }) {
-  const [selectedQuizId, setSelectedQuizId] = useState('');
-  const [attemptState, setAttemptState] = useState(null); // { id, quiz, questions, answers, timeLeft, submitted, results }
-  const [userAttemptsRecord, setUserAttemptsRecord] = useState({}); // { [quizId]: attemptCount }
-
   const publishedQuizzes = availableQuizzes.filter(q => q.status === 'published' || q.published);
 
-  // Auto-select first quiz if available
-  useEffect(() => {
-    if (publishedQuizzes.length > 0 && !selectedQuizId) {
-      setSelectedQuizId(publishedQuizzes[0].id);
-    }
-  }, [availableQuizzes]);
-
-  // Timer countdown for timeLimitSeconds (CSQ-F-021)
-  useEffect(() => {
-    if (!attemptState || attemptState.submitted || attemptState.timeLeft <= 0) return;
-
-    const timer = setInterval(() => {
-      setAttemptState(prev => {
-        if (!prev || prev.submitted) return prev;
-        if (prev.timeLeft <= 1) {
-          clearInterval(timer);
-          // Auto submit on time expiry
-          handleSubmitAttempt(prev, true);
-          return { ...prev, timeLeft: 0 };
-        }
-        return { ...prev, timeLeft: prev.timeLeft - 1 };
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [attemptState?.submitted, attemptState?.id]);
+  const [selectedQuizId, setSelectedQuizId] = useState(() => publishedQuizzes[0]?.id || '');
+  const [attemptState, setAttemptState] = useState(null);
+  const [userAttemptsRecord, setUserAttemptsRecord] = useState({});
 
   const currentQuiz = publishedQuizzes.find(q => q.id === selectedQuizId);
   const attemptsTaken = selectedQuizId ? (userAttemptsRecord[selectedQuizId] || 0) : 0;
   const attemptsRemaining = currentQuiz ? Math.max(0, currentQuiz.maxAttempts - attemptsTaken) : 0;
 
   // Shuffle helper (CSQ-F-021)
-  const shuffleArray = (arr) => {
+  const shuffleArray = useCallback((arr) => {
     const copy = [...arr];
     for (let i = copy.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [copy[i], copy[j]] = [copy[j], copy[i]];
     }
     return copy;
-  };
+  }, []);
 
-  // Start attempt (CSQ-F-021 Settings Enforcement)
-  const handleStartAttempt = () => {
-    if (!currentQuiz) return;
-
-    if (attemptsTaken >= currentQuiz.maxAttempts) {
-      alert(`Maximum attempts (${currentQuiz.maxAttempts}) reached for this quiz.`);
-      return;
-    }
-
-    let questionsToPresent = currentQuiz.questions || [];
-    if (currentQuiz.shuffle) {
-      questionsToPresent = shuffleArray(questionsToPresent);
-    }
-
-    const newAttemptsCount = attemptsTaken + 1;
-    setUserAttemptsRecord({ ...userAttemptsRecord, [currentQuiz.id]: newAttemptsCount });
-
-    setAttemptState({
-      id: `attempt-${Date.now()}`,
-      quiz: currentQuiz,
-      questions: questionsToPresent,
-      answers: {},
-      timeLeft: currentQuiz.timeLimitSeconds || 600,
-      submitted: false,
-      results: null,
-      expired: false
-    });
-  };
-
-  const handleAnswerChange = (questionId, value) => {
-    if (!attemptState || attemptState.submitted) return;
-    setAttemptState({
-      ...attemptState,
-      answers: {
-        ...attemptState.answers,
-        [questionId]: value
-      }
-    });
-  };
-
-  const handleSubmitAttempt = (activeState = attemptState, isExpired = false) => {
+  const handleSubmitAttempt = useCallback((activeState = attemptState, isExpired = false) => {
     if (!activeState || activeState.submitted) return;
 
     const questions = activeState.questions;
@@ -135,6 +68,65 @@ export default function QuizPlayer({ availableQuizzes = [] }) {
         breakdown: gradingResults
       }
     });
+  }, [attemptState]);
+
+  // Timer countdown for timeLimitSeconds (CSQ-F-021)
+  useEffect(() => {
+    if (!attemptState || attemptState.submitted || attemptState.timeLeft <= 0) return;
+
+    const timer = setInterval(() => {
+      setAttemptState(prev => {
+        if (!prev || prev.submitted) return prev;
+        if (prev.timeLeft <= 1) {
+          clearInterval(timer);
+          handleSubmitAttempt(prev, true);
+          return { ...prev, timeLeft: 0 };
+        }
+        return { ...prev, timeLeft: prev.timeLeft - 1 };
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [attemptState, handleSubmitAttempt]);
+
+  // Start attempt (CSQ-F-021 Settings Enforcement)
+  const handleStartAttempt = () => {
+    if (!currentQuiz) return;
+
+    if (attemptsTaken >= currentQuiz.maxAttempts) {
+      alert(`Maximum attempts (${currentQuiz.maxAttempts}) reached for this quiz.`);
+      return;
+    }
+
+    let questionsToPresent = currentQuiz.questions || [];
+    if (currentQuiz.shuffle) {
+      questionsToPresent = shuffleArray(questionsToPresent);
+    }
+
+    const newAttemptsCount = attemptsTaken + 1;
+    setUserAttemptsRecord(prevRecords => ({ ...prevRecords, [currentQuiz.id]: newAttemptsCount }));
+
+    setAttemptState({
+      id: `attempt-${Date.now().toString()}`,
+      quiz: currentQuiz,
+      questions: questionsToPresent,
+      answers: {},
+      timeLeft: currentQuiz.timeLimitSeconds || 600,
+      submitted: false,
+      results: null,
+      expired: false
+    });
+  };
+
+  const handleAnswerChange = (questionId, value) => {
+    if (!attemptState || attemptState.submitted) return;
+    setAttemptState(prev => ({
+      ...prev,
+      answers: {
+        ...prev.answers,
+        [questionId]: value
+      }
+    }));
   };
 
   const formatTimer = (seconds) => {
