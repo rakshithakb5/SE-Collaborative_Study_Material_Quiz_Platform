@@ -5,6 +5,7 @@ import QuizCreator from './pages/QuizCreator.jsx';
 import QuizPlayer from './pages/QuizPlayer.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
+import AdminPanel from './pages/AdminPanel.jsx';
 
 const initialQuizzes = [
   {
@@ -77,6 +78,8 @@ function App() {
       <h1>SE Collaborative Platform</h1>
       <hr />
       <Login />
+      <hr />
+      <AdminPanel />
       <hr />
       <Register />
       <hr />
