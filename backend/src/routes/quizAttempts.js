@@ -161,6 +161,7 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
         : undefined,
       correctAnswer: q.correctAnswer,
       points: q.points !== undefined ? Number(q.points) : 1,
+      explanation: q.explanation || (bankItem ? bankItem.explanation : undefined),
       fromBankId: q.fromBankId || undefined,
       bankVersion,
       difficulty: q.difficulty || (bankItem ? bankItem.difficulty : "medium"),
