@@ -31,7 +31,33 @@ router.get("/", (req, res) => {
   let quizList = Array.from(quizzes.values());
 
   if (role === "student") {
-    quizList = quizList.filter((q) => q.published);
+    const studentGroup = req.user ? req.user.group : undefined;
+    const now = Date.now();
+
+    quizList = quizList.filter((q) => {
+      if (!q.published) return false;
+
+      // Group check (CSQ-F-022)
+      if (Array.isArray(q.targetGroups) && q.targetGroups.length > 0) {
+        if (!studentGroup || !q.targetGroups.includes(studentGroup)) {
+          return false;
+        }
+      }
+
+      // Availability window check (CSQ-F-022)
+      if (q.availabilityWindow) {
+        if (q.availabilityWindow.start) {
+          const startTime = new Date(q.availabilityWindow.start).getTime();
+          if (now < startTime) return false;
+        }
+        if (q.availabilityWindow.end) {
+          const endTime = new Date(q.availabilityWindow.end).getTime();
+          if (now > endTime) return false;
+        }
+      }
+
+      return true;
+    });
   }
 
   const sanitized = quizList.map((quiz) => {
@@ -199,10 +225,30 @@ router.get("/:quizId", (req, res) => {
   }
 
   const role = req.user ? req.user.role : "student";
+  const now = Date.now();
 
   // Drafts are only accessible to instructors and admins (AC-CSQ-F-020)
   if (!quiz.published && role !== "instructor" && role !== "admin") {
     return res.status(404).json({ error: "Published quiz not found" });
+  }
+
+  // Enforce groups and availability window for students (CSQ-F-022)
+  if (role === "student") {
+    const studentGroup = req.user ? req.user.group : undefined;
+    if (Array.isArray(quiz.targetGroups) && quiz.targetGroups.length > 0) {
+      if (!studentGroup || !quiz.targetGroups.includes(studentGroup)) {
+        return res.status(403).json({ error: "Quiz is restricted to designated student groups" });
+      }
+    }
+
+    if (quiz.availabilityWindow) {
+      if (quiz.availabilityWindow.start && now < new Date(quiz.availabilityWindow.start).getTime()) {
+        return res.status(403).json({ error: "Quiz availability window has not started yet" });
+      }
+      if (quiz.availabilityWindow.end && now > new Date(quiz.availabilityWindow.end).getTime()) {
+        return res.status(403).json({ error: "Quiz availability window has closed" });
+      }
+    }
   }
 
   // Sanitize for students
@@ -342,6 +388,31 @@ router.post("/:quizId/attempts", requireRole("student"), (req, res) => {
 
   if (!quiz || !quiz.published) {
     return res.status(404).json({ error: "Published quiz not found" });
+  }
+
+  // Enforce student group access (CSQ-F-022)
+  const studentGroup = req.user ? req.user.group : undefined;
+  if (Array.isArray(quiz.targetGroups) && quiz.targetGroups.length > 0) {
+    if (!studentGroup || !quiz.targetGroups.includes(studentGroup)) {
+      return res.status(403).json({
+        error: "Quiz is restricted to designated student groups",
+      });
+    }
+  }
+
+  // Enforce availability window (CSQ-F-022)
+  if (quiz.availabilityWindow) {
+    const now = Date.now();
+    if (quiz.availabilityWindow.start && now < new Date(quiz.availabilityWindow.start).getTime()) {
+      return res.status(403).json({
+        error: "Quiz availability window has not started yet",
+      });
+    }
+    if (quiz.availabilityWindow.end && now > new Date(quiz.availabilityWindow.end).getTime()) {
+      return res.status(403).json({
+        error: "Quiz availability window has closed",
+      });
+    }
   }
 
   const key = `${quizId}:${userId}`;
