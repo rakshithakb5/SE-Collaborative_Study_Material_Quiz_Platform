@@ -77,11 +77,14 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
   const [subject, setSubject] = useState('Software Engineering');
   const [description, setDescription] = useState('');
 
-  // Quiz Settings (CSQ-F-021)
+  // Quiz Settings (CSQ-F-021 & CSQ-F-022)
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(15);
   const [maxAttempts, setMaxAttempts] = useState(2);
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [difficulty, setDifficulty] = useState('medium');
+  const [selectedGroups, setSelectedGroups] = useState(['Group 11', 'Group A']);
+  const [windowStart, setWindowStart] = useState('');
+  const [windowEnd, setWindowEnd] = useState('');
 
   // Selected / Added Questions for the Quiz (CSQ-F-020)
   const [quizQuestions, setQuizQuestions] = useState([]);
@@ -177,6 +180,11 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
       maxAttempts: Number(maxAttempts) || 1,
       shuffle: Boolean(shuffleQuestions),
       difficulty,
+      targetGroups: selectedGroups,
+      availabilityWindow: (windowStart || windowEnd) ? {
+        start: windowStart ? new Date(windowStart).toISOString() : null,
+        end: windowEnd ? new Date(windowEnd).toISOString() : null
+      } : null,
       settings: {
         timeLimitSeconds: Number(timeLimitMinutes) * 60,
         maxAttempts: Number(maxAttempts) || 1,
@@ -350,6 +358,54 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
                 </div>
               </div>
             </div>
+
+            {/* Target Groups & Availability Window (CSQ-F-022) */}
+            <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px dashed #b0d4f1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div>
+                <label><strong>Target Groups (CSQ-F-022): </strong></label>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '6px', fontSize: '13px' }}>
+                  {['Group 11', 'Group A', 'Group B', 'CSE-Sec1'].map((grp) => (
+                    <label key={grp} style={{ cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedGroups.includes(grp)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedGroups([...selectedGroups, grp]);
+                          } else {
+                            setSelectedGroups(selectedGroups.filter(g => g !== grp));
+                          }
+                        }}
+                      /> {grp}
+                    </label>
+                  ))}
+                </div>
+                <small style={{ color: '#666' }}>Only students in selected groups can view & attempt</small>
+              </div>
+
+              <div>
+                <label><strong>Availability Window (CSQ-F-022): </strong></label>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                  <input
+                    type="datetime-local"
+                    value={windowStart}
+                    onChange={(e) => setWindowStart(e.target.value)}
+                    style={{ padding: '4px', fontSize: '12px', flex: 1 }}
+                    title="Start window"
+                  />
+                  <span style={{ alignSelf: 'center', fontSize: '12px' }}>to</span>
+                  <input
+                    type="datetime-local"
+                    value={windowEnd}
+                    onChange={(e) => setWindowEnd(e.target.value)}
+                    style={{ padding: '4px', fontSize: '12px', flex: 1 }}
+                    title="End window"
+                  />
+                </div>
+                <small style={{ color: '#666' }}>Enforced start and end availability window</small>
+              </div>
+            </div>
+          </div>
           </div>
 
           {/* Questions Selection & Bank */}
