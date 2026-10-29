@@ -11,6 +11,7 @@ const { router: materialsRouter } = require("./routes/materials");
 const questionBankRouter = require("./routes/questionBank");
 const { router: authRouter } = require("./routes/auth");
 const { router: adminRouter } = require("./routes/admin");
+const notificationsRouter = require("./routes/notifications");
 const { authenticate } = require("./middleware/authenticate");
 
 const app = express();
@@ -57,6 +58,7 @@ app.use("/api/materials", materialsRouter);
 app.use("/api/question-bank", questionBankRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/notifications", notificationsRouter);
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
