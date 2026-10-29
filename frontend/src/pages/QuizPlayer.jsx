@@ -106,8 +106,9 @@ export default function QuizPlayer({ availableQuizzes = [] }) {
     const newAttemptsCount = attemptsTaken + 1;
     setUserAttemptsRecord(prevRecords => ({ ...prevRecords, [currentQuiz.id]: newAttemptsCount }));
 
+    const attemptId = `attempt-${currentQuiz.id}-${newAttemptsCount}`;
     setAttemptState({
-      id: `attempt-${Date.now().toString()}`,
+      id: attemptId,
       quiz: currentQuiz,
       questions: questionsToPresent,
       answers: {},
