@@ -1,6 +1,10 @@
 const express = require("express");
 const { requireRole } = require("../middleware/rbac");
-const { questionBank } = require("../models/quizStore");
+const {
+  questionBank,
+  updateBankQuestion,
+  reuseBankQuestion,
+} = require("../models/quizStore");
 
 const router = express.Router();
 
@@ -84,12 +88,57 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
     difficulty: difficulty || "medium",
     topic: topic || "General",
     points: points ? Number(points) : 1,
+    version: 1,
+    history: [
+      {
+        version: 1,
+        modifiedAt: Date.now(),
+        prompt: questionText,
+        options: type === "mcq" ? options : undefined,
+        correctAnswer,
+        points: points ? Number(points) : 1,
+      },
+    ],
     createdAt: Date.now(),
     createdBy: req.user ? req.user.id : "system",
   };
 
   questionBank.set(id, newQuestion);
   res.status(201).json({ question: newQuestion });
+});
+
+// PUT /api/question-bank/:id - Update question in bank with version tracking (CSQ-F-023)
+router.put("/:id", requireRole("instructor", "admin"), (req, res) => {
+  const { id } = req.params;
+  const existing = questionBank.get(id);
+  if (!existing) {
+    return res.status(404).json({ error: "Question not found in bank" });
+  }
+
+  const { prompt, options, correctAnswer, difficulty, topic, points } = req.body;
+  const updates = {};
+  if (prompt !== undefined) updates.prompt = prompt;
+  if (options !== undefined) updates.options = options;
+  if (correctAnswer !== undefined) updates.correctAnswer = correctAnswer;
+  if (difficulty !== undefined) updates.difficulty = difficulty;
+  if (topic !== undefined) updates.topic = topic;
+  if (points !== undefined) updates.points = Number(points);
+
+  const updated = updateBankQuestion(id, updates, req.user);
+  return res.status(200).json({ question: updated });
+});
+
+// POST /api/question-bank/:id/reuse - Reuse a question from the bank with decoupled copy (CSQ-F-023)
+router.post("/:id/reuse", requireRole("instructor", "admin"), (req, res) => {
+  const { id } = req.params;
+  const overrides = req.body || {};
+
+  const reused = reuseBankQuestion(id, overrides);
+  if (!reused) {
+    return res.status(404).json({ error: "Question not found in bank" });
+  }
+
+  return res.status(200).json({ question: reused });
 });
 
 module.exports = router;
