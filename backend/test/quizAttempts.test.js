@@ -110,7 +110,35 @@ test("submits an active attempt successfully", async () => {
     assert.equal(response.body.attempt.status, "submitted");
     assert.equal(response.body.attempt.score, 2);
     assert.equal(response.body.attempt.maxScore, 2);
+    assert.ok(Array.isArray(response.body.attempt.results));
+    assert.equal(response.body.attempt.results[0].correctAnswer, "A");
+    assert.ok(response.body.attempt.results[0].explanation);
   });
+
+test("TC-Quiz-03 / CSQ-F-032: quiz submission results include correct answers and explanations (Defect #62)", async () => {
+  const startResponse = await request(app)
+    .post("/api/quizzes/quiz-1/attempts")
+    .set(asStudent("student-1")).send({});
+
+  const attemptId = startResponse.body.attempt.id;
+  const response = await request(app)
+    .post(`/api/quizzes/quiz-1/attempts/${attemptId}/submit`)
+    .set(asStudent("student-1")).send({
+      answers: [
+        { questionId: "q1", answer: "B" },
+        { questionId: "q2", answer: false },
+      ],
+    });
+
+  assert.equal(response.status, 200);
+  const results = response.body.attempt.results;
+  assert.equal(results.length, 2);
+  assert.equal(results[0].isCorrect, false);
+  assert.equal(results[0].correctAnswer, "A");
+  assert.ok(results[0].explanation.includes("A"));
+  assert.equal(results[1].isCorrect, false);
+  assert.equal(results[1].correctAnswer, true);
+});
   
 
     
