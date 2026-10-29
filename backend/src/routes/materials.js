@@ -3,6 +3,7 @@ const crypto = require("node:crypto");
 const { requireRole } = require("../middleware/rbac");
 const { scanDocument } = require("../services/plagiarismService");
 const { recordActivity } = require("../services/auditLog");
+const { notifyNewMaterial } = require("../services/notifier");
 
 const router = express.Router();
 const materials = new Map();
@@ -130,6 +131,9 @@ createMaterial(id, { title: title.trim(), content });
 
   const material = materials.get(id);
   await screenMaterial(material, content);
+  if (material.status === "published") {
+    notifyNewMaterial(material);
+  }
   recordActivity(
     req.user,
     "material.upload",
@@ -242,6 +246,54 @@ router.get(
   }
 );
 
+// POST /api/materials/:id/flag - Report/flag material for admin moderation (CSQ-F-061)
+router.post(
+  "/:id/flag",
+  requireRole("student", "instructor", "admin"),
+  (req, res) => {
+    const { id } = req.params;
+    const material = materials.get(id);
+
+    if (!material || material.removed) {
+      return res.status(404).json({ error: "Material not found" });
+    }
+
+    const { reason } = req.body || {};
+    if (typeof reason !== "string" || !reason.trim()) {
+      return res
+        .status(400)
+        .json({ error: "A reason is required to flag content" });
+    }
+
+    if (!Array.isArray(material.userFlags)) {
+      material.userFlags = [];
+    }
+
+    const flagEntry = {
+      flagId: `flag-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      userId: req.user.id,
+      userRole: req.user.role,
+      reason: reason.trim(),
+      flaggedAt: Date.now(),
+    };
+
+    material.userFlags.push(flagEntry);
+    material.isUserFlagged = true;
+
+    recordActivity(
+      req.user,
+      "content.flag",
+      `material:${id}`,
+      `Material flagged: ${reason.trim()}`
+    );
+
+    return res.status(200).json({
+      message: "Content flagged for admin moderation review",
+      flag: flagEntry,
+    });
+  }
+);
+
 function removeMaterial(materialId) {
   const material = materials.get(materialId);
 
@@ -264,11 +316,27 @@ function listForReview() {
   );
 }
 
+function listUserFlaggedMaterials() {
+  return Array.from(materials.values()).filter(
+    (m) => !m.removed && Array.isArray(m.userFlags) && m.userFlags.length > 0
+  );
+}
+
+function dismissMaterialFlag(materialId) {
+  const material = materials.get(materialId);
+  if (!material) return null;
+  material.userFlags = [];
+  material.isUserFlagged = false;
+  return material;
+}
+
 module.exports = {
   router,
   createMaterial,
   getMaterial,
   listForReview,
+  listUserFlaggedMaterials,
+  dismissMaterialFlag,
   removeMaterial,
   resetMaterialData,
 };

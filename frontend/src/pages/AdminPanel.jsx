@@ -58,14 +58,15 @@ const AdminPanel = () => {
     setBusy(true);
     const [u, q, a] = await Promise.all([
       callApi('GET', '/api/admin/users'),
-      callApi('GET', '/api/admin/materials/review-queue'),
+      callApi('GET', '/api/admin/moderation-queue'),
       callApi('GET', '/api/admin/audit-log'),
     ]);
     if (!u.ok) {
       fail(u.data, u.status);
     } else {
       setUsers(u.data.users);
-      setQueue(q.ok ? q.data.items : []);
+      const queueItems = q.ok ? (q.data.queue || q.data.items || []) : [];
+      setQueue(queueItems);
       setAuditEntries(a.ok ? [...a.data.entries].reverse().slice(0, 15) : []);
       if (announce) setMessage({ type: 'ok', text: 'Admin data loaded.' });
     }
@@ -169,38 +170,81 @@ const AdminPanel = () => {
         </table>
       )}
 
-      <h3>Content review queue</h3>
+      <h3>Content Review & Moderation Queue (CSQ-F-061)</h3>
       {queue.length === 0 ? (
         <p>Nothing is waiting for review.</p>
       ) : (
         <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-          <caption style={{ textAlign: 'left' }}>Material held by the plagiarism check</caption>
+          <caption style={{ textAlign: 'left' }}>Flagged content awaiting administrative action</caption>
           <thead>
             <tr>
+              <th style={cell}>Type</th>
               <th style={cell}>Title</th>
               <th style={cell}>Source</th>
-              <th style={cell}>Reason</th>
+              <th style={cell}>Reason / Reports</th>
               <th style={cell}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {queue.map((item) => (
-              <tr key={`${item.materialId}-${item.source}`}>
-                <td style={cell}>{item.title}</td>
-                <td style={cell}>{item.source}</td>
-                <td style={cell}>{item.reason}</td>
-                <td style={cell}>
-                  <button type="button" style={smallButton} disabled={busy}
-                    onClick={() => act(`/api/admin/materials/${item.materialId}/approve`, `${item.title} published.`)}>
-                    Approve
-                  </button>
-                  <button type="button" style={smallButton} disabled={busy}
-                    onClick={() => act(`/api/admin/materials/${item.materialId}/remove`, `${item.title} removed.`)}>
-                    Remove
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {queue.map((item) => {
+              const itemId = item.id || item.materialId;
+              const type = item.contentType || 'material';
+              const isPlagiarism = item.source === 'plagiarism-service';
+
+              return (
+                <tr key={`${type}-${itemId}-${item.source}`}>
+                  <td style={cell}>
+                    <span style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      backgroundColor: type === 'quiz' ? '#e0e7ff' : '#fef3c7',
+                      color: type === 'quiz' ? '#3730a3' : '#92400e'
+                    }}>
+                      {type.toUpperCase()}
+                    </span>
+                  </td>
+                  <td style={cell}>{item.title}</td>
+                  <td style={cell}>
+                    <span style={{
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      backgroundColor: isPlagiarism ? '#fee2e2' : '#f3e8ff',
+                      color: isPlagiarism ? '#991b1b' : '#6b21a8'
+                    }}>
+                      {isPlagiarism ? 'Plagiarism Check' : `User Flag (${item.flagCount || 1})`}
+                    </span>
+                  </td>
+                  <td style={cell}>{item.reason}</td>
+                  <td style={cell}>
+                    {isPlagiarism ? (
+                      <>
+                        <button type="button" style={smallButton} disabled={busy}
+                          onClick={() => act(`/api/admin/materials/${itemId}/approve`, `${item.title} approved and published.`)}>
+                          Approve
+                        </button>
+                        <button type="button" style={smallButton} disabled={busy}
+                          onClick={() => act(`/api/admin/materials/${itemId}/remove`, `${item.title} removed.`)}>
+                          Remove
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" style={smallButton} disabled={busy}
+                          onClick={() => act(`/api/admin/moderation-queue/${type === 'quiz' ? 'quizzes' : 'materials'}/${itemId}/dismiss`, `Flags dismissed for ${item.title}.`)}>
+                          Dismiss Flag
+                        </button>
+                        <button type="button" style={smallButton} disabled={busy}
+                          onClick={() => act(`/api/admin/${type === 'quiz' ? 'quizzes' : 'materials'}/${itemId}/remove`, `${item.title} removed.`)}>
+                          Remove Content
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

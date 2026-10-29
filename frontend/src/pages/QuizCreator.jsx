@@ -77,11 +77,14 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
   const [subject, setSubject] = useState('Software Engineering');
   const [description, setDescription] = useState('');
 
-  // Quiz Settings (CSQ-F-021)
+  // Quiz Settings (CSQ-F-021 & CSQ-F-022)
   const [timeLimitMinutes, setTimeLimitMinutes] = useState(15);
   const [maxAttempts, setMaxAttempts] = useState(2);
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [difficulty, setDifficulty] = useState('medium');
+  const [selectedGroups, setSelectedGroups] = useState(['Group 11', 'Group A']);
+  const [windowStart, setWindowStart] = useState('');
+  const [windowEnd, setWindowEnd] = useState('');
 
   // Selected / Added Questions for the Quiz (CSQ-F-020)
   const [quizQuestions, setQuizQuestions] = useState([]);
@@ -98,14 +101,41 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
   // Bank question filter
   const [bankFilterTopic, setBankFilterTopic] = useState('All');
   const [bankFilterType, setBankFilterType] = useState('All');
+  const [reusingFromBank, setReusingFromBank] = useState(null);
 
-  // Add question from Question Bank
+  // Add question directly from Question Bank
   const handleAddFromBank = (bankQ) => {
-    if (quizQuestions.some(q => q.id === bankQ.id)) {
+    if (quizQuestions.some(q => q.id === bankQ.id || q.fromBankId === bankQ.id)) {
       alert('This question is already in the quiz!');
       return;
     }
-    setQuizQuestions([...quizQuestions, { ...bankQ, fromBank: true }]);
+    setQuizQuestions([
+      ...quizQuestions,
+      {
+        ...bankQ,
+        fromBankId: bankQ.id,
+        bankVersion: bankQ.version || 1,
+        options: bankQ.options ? [...bankQ.options] : undefined,
+      },
+    ]);
+  };
+
+  // Reuse and customize question copy from Question Bank (CSQ-F-023)
+  const handleReuseAndEdit = (bankQ) => {
+    setReusingFromBank(bankQ);
+    setCustomType(bankQ.type);
+    setCustomPrompt(bankQ.prompt);
+    if (bankQ.type === 'mcq') {
+      const opts = bankQ.options ? [...bankQ.options] : [];
+      while (opts.length < 4) opts.push('');
+      setCustomOptions(opts);
+      setCustomMcqAnswer(bankQ.correctAnswer || '');
+    } else if (bankQ.type === 'true_false') {
+      setCustomTfAnswer(bankQ.correctAnswer === true);
+    } else if (bankQ.type === 'short_answer') {
+      setCustomSaAnswer(bankQ.correctAnswer || '');
+    }
+    setCustomPoints(bankQ.points || 1);
   };
 
   // Add custom question
@@ -118,7 +148,10 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
       prompt: customPrompt,
       type: customType,
       points: Number(customPoints) || 1,
-      difficulty
+      difficulty,
+      fromBankId: reusingFromBank ? reusingFromBank.id : undefined,
+      bankVersion: reusingFromBank ? (reusingFromBank.version || 1) : undefined,
+      isCustomizedCopy: Boolean(reusingFromBank),
     };
 
     if (customType === 'mcq') {
@@ -145,6 +178,7 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
     }
 
     setQuizQuestions([...quizQuestions, newQ]);
+    setReusingFromBank(null);
     setCustomPrompt('');
     setCustomOptions(['', '', '', '']);
     setCustomMcqAnswer('');
@@ -177,6 +211,11 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
       maxAttempts: Number(maxAttempts) || 1,
       shuffle: Boolean(shuffleQuestions),
       difficulty,
+      targetGroups: selectedGroups,
+      availabilityWindow: (windowStart || windowEnd) ? {
+        start: windowStart ? new Date(windowStart).toISOString() : null,
+        end: windowEnd ? new Date(windowEnd).toISOString() : null
+      } : null,
       settings: {
         timeLimitSeconds: Number(timeLimitMinutes) * 60,
         maxAttempts: Number(maxAttempts) || 1,
@@ -350,6 +389,53 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
                 </div>
               </div>
             </div>
+
+            {/* Target Groups & Availability Window (CSQ-F-022) */}
+            <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px dashed #b0d4f1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div>
+                <label><strong>Target Groups (CSQ-F-022): </strong></label>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '6px', fontSize: '13px' }}>
+                  {['Group 11', 'Group A', 'Group B', 'CSE-Sec1'].map((grp) => (
+                    <label key={grp} style={{ cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedGroups.includes(grp)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedGroups([...selectedGroups, grp]);
+                          } else {
+                            setSelectedGroups(selectedGroups.filter(g => g !== grp));
+                          }
+                        }}
+                      /> {grp}
+                    </label>
+                  ))}
+                </div>
+                <small style={{ color: '#666' }}>Only students in selected groups can view & attempt</small>
+              </div>
+
+              <div>
+                <label><strong>Availability Window (CSQ-F-022): </strong></label>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                  <input
+                    type="datetime-local"
+                    value={windowStart}
+                    onChange={(e) => setWindowStart(e.target.value)}
+                    style={{ padding: '4px', fontSize: '12px', flex: 1 }}
+                    title="Start window"
+                  />
+                  <span style={{ alignSelf: 'center', fontSize: '12px' }}>to</span>
+                  <input
+                    type="datetime-local"
+                    value={windowEnd}
+                    onChange={(e) => setWindowEnd(e.target.value)}
+                    style={{ padding: '4px', fontSize: '12px', flex: 1 }}
+                    title="End window"
+                  />
+                </div>
+                <small style={{ color: '#666' }}>Enforced start and end availability window</small>
+              </div>
+            </div>
           </div>
 
           {/* Questions Selection & Bank */}
@@ -388,20 +474,36 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
                       <span>{q.difficulty} | {q.points} pt</span>
                     </div>
                     <p style={{ margin: '6px 0', fontSize: '14px' }}>{q.prompt}</p>
-                    <button
-                      onClick={() => handleAddFromBank(q)}
-                      style={{
-                        padding: '4px 10px',
-                        background: '#27ae60',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '3px',
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      + Add to Quiz
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => handleAddFromBank(q)}
+                        style={{
+                          padding: '4px 10px',
+                          background: '#27ae60',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        + Add Direct
+                      </button>
+                      <button
+                        onClick={() => handleReuseAndEdit(q)}
+                        style={{
+                          padding: '4px 10px',
+                          background: '#8e44ad',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        Reuse & Customize (CSQ-F-023)
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -409,7 +511,13 @@ export default function QuizCreator({ onQuizCreated, existingQuizzes = [] }) {
 
             {/* Right: Add Custom Question */}
             <div style={{ background: '#fdfefe', border: '1px solid #d5dbdb', borderRadius: '6px', padding: '15px' }}>
-              <h3 style={{ marginTop: 0 }}>3B. Add Custom Question</h3>
+              <h3 style={{ marginTop: 0 }}>3B. Custom Question / Customize Reused Question</h3>
+              {reusingFromBank && (
+                <div style={{ background: '#f5eef8', border: '1px solid #d7bde2', padding: '8px 12px', borderRadius: '4px', marginBottom: '10px', fontSize: '13px' }}>
+                  <strong>Customizing Reused Question:</strong> {reusingFromBank.id} (Version {reusingFromBank.version || 1})
+                  <div style={{ fontSize: '11px', color: '#666' }}>Changes here apply ONLY to this quiz copy. Original bank question remains unchanged (AC-CSQ-F-023).</div>
+                </div>
+              )}
               <form onSubmit={handleAddCustomQuestion}>
                 <div style={{ marginBottom: '8px' }}>
                   <label>Type: </label>

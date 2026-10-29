@@ -19,6 +19,7 @@ PES University, Software Engineering mini-project, Group 11.
 - SRS v1.0 (`frontend/SRS_Collaborative_Study_Material_Quiz_Platform.pdf`)
 - SAD v1.0 (`SAD_final.pdf`) and STP v1.0 (`STP_final.pdf`)
 - Availability plan, CSQ-NF-002 (`docs/availability.md`)
+- Sprint 2 features & test traceability (`docs/sprint2_features.md`)
 - Performance results (`backend/performance/results/`)
 - Backlog and sprint board: the GitHub Project "CSQ Platform – Mini Project"
 
@@ -82,6 +83,11 @@ Frontend checks: `npm run lint` and `npm run build` in `frontend/`.
 | Materials | CSQ-F-011 | Every upload is scanned by a mock Plagiarism Detection Service. Material at or above the threshold is held for admin review. If the service is down, the scan is retried once and the item is held. |
 | Admin | CSQ-F-060, F-062 | List, suspend and reactivate users (a suspended account cannot log in and its token stops working), warn users, and remove content. All need a reason and are audit-logged. |
 | Quizzes | CSQ-F-020, F-021, F-030 | Create quizzes from the question bank with time limit, attempt limit and shuffle settings, and take timed quiz attempts. |
+| Quizzes | CSQ-F-022, F-023 | Publish quizzes to specific target groups with availability windows; reuse questions from question bank with deep-copy isolation and revision history. |
+| Security | CSQ-SR-003 | Encrypt quiz questions and answers at rest using AES-256-GCM cipher with random IVs and transparent server decryption. |
+| Notifications | CSQ-F-052 | Real-time multi-event notifications for new materials, 24h quiz deadlines, and graded submissions delivered within 1 minute. |
+| Admin | CSQ-F-061 | Unified moderation queue consolidating user reports and plagiarism scan flags with audit logs and dismiss/remove actions. |
+| Grading | Defect #62 (CSQ-F-032) | Return correct answers and explanations upon quiz submission evaluated securely server-side. |
 | Performance | CSQ-NF-001, NF-003 | Measured page-load and concurrent-attempt results are in `backend/performance/results/`. |
 | Reliability | CSQ-NF-002 | Availability plan in `docs/availability.md` (a design target; it is not measured on this prototype). |
 

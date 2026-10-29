@@ -1,11 +1,15 @@
 const express = require("express");
 const { requireRole } = require("../middleware/rbac");
 const { recordActivity } = require("../services/auditLog");
+const { notifyGradePublished } = require("../services/notifier");
 const {
   quizzes,
+  rawEncryptedStorage,
   attempts,
   questionBank,
   registerQuiz,
+  getRawStorage,
+  decryptStoredQuiz,
   resetQuizStore,
 } = require("../models/quizStore");
 
@@ -31,7 +35,33 @@ router.get("/", (req, res) => {
   let quizList = Array.from(quizzes.values());
 
   if (role === "student") {
-    quizList = quizList.filter((q) => q.published);
+    const studentGroup = req.user ? req.user.group : undefined;
+    const now = Date.now();
+
+    quizList = quizList.filter((q) => {
+      if (!q.published) return false;
+
+      // Group check (CSQ-F-022)
+      if (Array.isArray(q.targetGroups) && q.targetGroups.length > 0) {
+        if (!studentGroup || !q.targetGroups.includes(studentGroup)) {
+          return false;
+        }
+      }
+
+      // Availability window check (CSQ-F-022)
+      if (q.availabilityWindow) {
+        if (q.availabilityWindow.start) {
+          const startTime = new Date(q.availabilityWindow.start).getTime();
+          if (now < startTime) return false;
+        }
+        if (q.availabilityWindow.end) {
+          const endTime = new Date(q.availabilityWindow.end).getTime();
+          if (now > endTime) return false;
+        }
+      }
+
+      return true;
+    });
   }
 
   const sanitized = quizList.map((quiz) => {
@@ -117,15 +147,24 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
       }
     }
 
+    const bankItem = q.fromBankId ? questionBank.get(q.fromBankId) : null;
+    const bankVersion = q.bankVersion || (bankItem ? bankItem.version || 1 : undefined);
+
     normalizedQuestions.push({
       id: qId,
       type: qType,
       prompt: qPrompt,
-      options: q.options || (qType === "true_false" ? [true, false] : undefined),
+      options: Array.isArray(q.options)
+        ? [...q.options]
+        : qType === "true_false"
+        ? [true, false]
+        : undefined,
       correctAnswer: q.correctAnswer,
       points: q.points !== undefined ? Number(q.points) : 1,
+      explanation: q.explanation || (bankItem ? bankItem.explanation : undefined),
       fromBankId: q.fromBankId || undefined,
-      difficulty: q.difficulty || "medium",
+      bankVersion,
+      difficulty: q.difficulty || (bankItem ? bankItem.difficulty : "medium"),
     });
   }
 
@@ -141,6 +180,21 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
   const shuffle = Boolean(settings.shuffle);
   const difficulty = settings.difficulty || "medium";
 
+  const targetGroups = Array.isArray(req.body.targetGroups)
+    ? req.body.targetGroups
+    : [];
+  const availabilityWindow =
+    req.body.availabilityWindow && typeof req.body.availabilityWindow === "object"
+      ? {
+          start: req.body.availabilityWindow.start
+            ? new Date(req.body.availabilityWindow.start).toISOString()
+            : null,
+          end: req.body.availabilityWindow.end
+            ? new Date(req.body.availabilityWindow.end).toISOString()
+            : null,
+        }
+      : null;
+
   const quizId = customId || `quiz-${Date.now()}`;
   const isPublished = status === "published";
 
@@ -155,6 +209,8 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
     maxAttempts,
     shuffle,
     difficulty,
+    targetGroups,
+    availabilityWindow,
     settings: {
       timeLimitSeconds,
       maxAttempts,
@@ -167,7 +223,7 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
     updatedAt: Date.now(),
   };
 
-  quizzes.set(quizId, newQuiz);
+  registerQuiz(quizId, newQuiz);
 
   return res.status(201).json({ quiz: newQuiz });
 });
@@ -182,10 +238,30 @@ router.get("/:quizId", (req, res) => {
   }
 
   const role = req.user ? req.user.role : "student";
+  const now = Date.now();
 
   // Drafts are only accessible to instructors and admins (AC-CSQ-F-020)
   if (!quiz.published && role !== "instructor" && role !== "admin") {
     return res.status(404).json({ error: "Published quiz not found" });
+  }
+
+  // Enforce groups and availability window for students (CSQ-F-022)
+  if (role === "student") {
+    const studentGroup = req.user ? req.user.group : undefined;
+    if (Array.isArray(quiz.targetGroups) && quiz.targetGroups.length > 0) {
+      if (!studentGroup || !quiz.targetGroups.includes(studentGroup)) {
+        return res.status(403).json({ error: "Quiz is restricted to designated student groups" });
+      }
+    }
+
+    if (quiz.availabilityWindow) {
+      if (quiz.availabilityWindow.start && now < new Date(quiz.availabilityWindow.start).getTime()) {
+        return res.status(403).json({ error: "Quiz availability window has not started yet" });
+      }
+      if (quiz.availabilityWindow.end && now > new Date(quiz.availabilityWindow.end).getTime()) {
+        return res.status(403).json({ error: "Quiz availability window has closed" });
+      }
+    }
   }
 
   // Sanitize for students
@@ -252,11 +328,113 @@ router.put("/:quizId", requireRole("instructor", "admin"), (req, res) => {
     existing.questions = questions;
   }
 
+  if (Array.isArray(req.body.targetGroups)) {
+    existing.targetGroups = req.body.targetGroups;
+  }
+
+  if (req.body.availabilityWindow !== undefined) {
+    existing.availabilityWindow =
+      req.body.availabilityWindow && typeof req.body.availabilityWindow === "object"
+        ? {
+            start: req.body.availabilityWindow.start
+              ? new Date(req.body.availabilityWindow.start).toISOString()
+              : null,
+            end: req.body.availabilityWindow.end
+              ? new Date(req.body.availabilityWindow.end).toISOString()
+              : null,
+          }
+        : null;
+  }
+
   existing.updatedAt = Date.now();
-  quizzes.set(quizId, existing);
+  registerQuiz(quizId, existing);
 
   return res.status(200).json({ quiz: existing });
 });
+
+// POST /api/quizzes/:quizId/publish - Publish quiz to specific groups with availability window (CSQ-F-022)
+router.post("/:quizId/publish", requireRole("instructor", "admin"), (req, res) => {
+  const { quizId } = req.params;
+  const quiz = quizzes.get(quizId);
+
+  if (!quiz) {
+    return res.status(404).json({ error: "Quiz not found" });
+  }
+
+  const { targetGroups, availabilityWindow } = req.body;
+
+  if (Array.isArray(targetGroups)) {
+    quiz.targetGroups = targetGroups;
+  }
+
+  if (availabilityWindow !== undefined) {
+    quiz.availabilityWindow =
+      availabilityWindow && typeof availabilityWindow === "object"
+        ? {
+            start: availabilityWindow.start
+              ? new Date(availabilityWindow.start).toISOString()
+              : null,
+            end: availabilityWindow.end
+              ? new Date(availabilityWindow.end).toISOString()
+              : null,
+          }
+        : null;
+  }
+
+  quiz.status = "published";
+  quiz.published = true;
+  quiz.updatedAt = Date.now();
+  registerQuiz(quizId, quiz);
+
+  return res.status(200).json({ quiz });
+});
+
+// POST /api/quizzes/:quizId/flag - Report a quiz for admin moderation (CSQ-F-061)
+router.post(
+  "/:quizId/flag",
+  requireRole("student", "instructor", "admin"),
+  (req, res) => {
+    const { quizId } = req.params;
+    const quiz = quizzes.get(quizId);
+    if (!quiz) {
+      return res.status(404).json({ error: "Quiz not found" });
+    }
+
+    const { reason } = req.body || {};
+    if (typeof reason !== "string" || !reason.trim()) {
+      return res
+        .status(400)
+        .json({ error: "A reason is required to flag content" });
+    }
+
+    if (!Array.isArray(quiz.userFlags)) {
+      quiz.userFlags = [];
+    }
+
+    const flagEntry = {
+      flagId: `flag-q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      userId: req.user.id,
+      userRole: req.user.role,
+      reason: reason.trim(),
+      flaggedAt: Date.now(),
+    };
+
+    quiz.userFlags.push(flagEntry);
+    quiz.isUserFlagged = true;
+
+    recordActivity(
+      req.user,
+      "content.flag",
+      `quiz:${quizId}`,
+      `Quiz flagged: ${reason.trim()}`
+    );
+
+    return res.status(200).json({
+      message: "Quiz flagged for admin moderation review",
+      flag: flagEntry,
+    });
+  }
+);
 
 // Start a quiz attempt (CSQ-F-021: enforces settings during attempt)
 router.post("/:quizId/attempts", requireRole("student"), (req, res) => {
@@ -270,6 +448,31 @@ router.post("/:quizId/attempts", requireRole("student"), (req, res) => {
 
   if (!quiz || !quiz.published) {
     return res.status(404).json({ error: "Published quiz not found" });
+  }
+
+  // Enforce student group access (CSQ-F-022)
+  const studentGroup = req.user ? req.user.group : undefined;
+  if (Array.isArray(quiz.targetGroups) && quiz.targetGroups.length > 0) {
+    if (!studentGroup || !quiz.targetGroups.includes(studentGroup)) {
+      return res.status(403).json({
+        error: "Quiz is restricted to designated student groups",
+      });
+    }
+  }
+
+  // Enforce availability window (CSQ-F-022)
+  if (quiz.availabilityWindow) {
+    const now = Date.now();
+    if (quiz.availabilityWindow.start && now < new Date(quiz.availabilityWindow.start).getTime()) {
+      return res.status(403).json({
+        error: "Quiz availability window has not started yet",
+      });
+    }
+    if (quiz.availabilityWindow.end && now > new Date(quiz.availabilityWindow.end).getTime()) {
+      return res.status(403).json({
+        error: "Quiz availability window has closed",
+      });
+    }
   }
 
   const key = `${quizId}:${userId}`;
@@ -407,11 +610,19 @@ router.post(
             question.correctAnswer.trim().toLowerCase();
       }
 
+      const explanation =
+        question.explanation ||
+        (isCorrect
+          ? "Correct answer submitted."
+          : `Expected: ${question.correctAnswer}.`);
+
       return {
         questionId: question.id,
         isCorrect,
         pointsAwarded: isCorrect ? question.points ?? 1 : 0,
         maxPoints: question.points ?? 1,
+        correctAnswer: question.correctAnswer,
+        explanation,
       };
     });
 
@@ -429,6 +640,7 @@ router.post(
     attempt.score = score;
     attempt.maxScore = maxScore;
     attempt.results = results;
+    notifyGradePublished(attempt, quiz, req.user.email || req.user.id);
     recordActivity(req.user, "quiz.attempt.submit", `quiz:${attempt.quizId}`, "Quiz attempt submitted");
 
     return res.status(200).json({ attempt });
@@ -507,9 +719,35 @@ function getActiveAttemptCount(quizId) {
   return count;
 }
 
+function listUserFlaggedQuizzes() {
+  return Array.from(quizzes.values()).filter(
+    (q) => Array.isArray(q.userFlags) && q.userFlags.length > 0
+  );
+}
+
+function dismissQuizFlag(quizId) {
+  const quiz = quizzes.get(quizId);
+  if (!quiz) return null;
+  quiz.userFlags = [];
+  quiz.isUserFlagged = false;
+  return quiz;
+}
+
+function removeQuiz(quizId) {
+  const quiz = quizzes.get(quizId);
+  if (!quiz) return null;
+  quizzes.delete(quizId);
+  return quiz;
+}
+
 module.exports = {
   router,
   registerQuiz,
+  getRawStorage,
+  decryptStoredQuiz,
+  listUserFlaggedQuizzes,
+  dismissQuizFlag,
+  removeQuiz,
   resetQuizAttemptData,
   getActiveAttemptCount,
 };

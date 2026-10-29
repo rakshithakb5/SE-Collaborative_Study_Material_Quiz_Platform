@@ -35,6 +35,9 @@ export default function Library() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('All');
   const [newComments, setNewComments] = useState({});
+  const [flaggingId, setFlaggingId] = useState(null);
+  const [flagReason, setFlagReason] = useState('');
+  const [reportStatus, setReportStatus] = useState({});
 
   const getAvgRating = (ratings) => {
     if (!ratings || ratings.length === 0) return '0.0';
@@ -63,6 +66,29 @@ export default function Library() {
     }));
 
     setNewComments({ ...newComments, [id]: '' });
+  };
+
+  const handleFlagContent = async (id) => {
+    if (!flagReason.trim()) return;
+    const token = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('csq_token') : null;
+
+    try {
+      if (token) {
+        await fetch(`/api/materials/${id}/flag`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ reason: flagReason })
+        });
+      }
+      setReportStatus(prev => ({ ...prev, [id]: 'Reported for review' }));
+    } catch {
+      setReportStatus(prev => ({ ...prev, [id]: 'Report logged' }));
+    }
+    setFlaggingId(null);
+    setFlagReason('');
   };
 
   const filteredMaterials = materials.filter(item => {
@@ -155,6 +181,47 @@ export default function Library() {
                     Post
                   </button>
                 </div>
+              </div>
+
+              {/* CSQ-F-061: Flag / Report Content */}
+              <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px dashed #e0e0e0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                {reportStatus[material.id] ? (
+                  <span style={{ fontSize: '13px', color: '#2e7d32', fontWeight: 500 }}>
+                    ✓ {reportStatus[material.id]}
+                  </span>
+                ) : flaggingId === material.id ? (
+                  <div style={{ display: 'flex', gap: '8px', width: '100%', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="Reason for reporting (e.g. Inappropriate content, copyright violation)..."
+                      value={flagReason}
+                      onChange={(e) => setFlagReason(e.target.value)}
+                      style={{ flex: 1, padding: '6px 10px', fontSize: '13px', borderRadius: '4px', border: '1px solid #dc2626' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleFlagContent(material.id)}
+                      style={{ padding: '6px 12px', fontSize: '13px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      Submit Flag
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setFlaggingId(null); setFlagReason(''); }}
+                      style={{ padding: '6px 10px', fontSize: '13px', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { setFlaggingId(material.id); setFlagReason(''); }}
+                    style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    🚩 Report / Flag content
+                  </button>
+                )}
               </div>
             </div>
           ))

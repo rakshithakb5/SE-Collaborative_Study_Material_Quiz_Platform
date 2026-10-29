@@ -1,4 +1,7 @@
+const { encryptObject, decryptObject } = require("../utils/crypto");
+
 const quizzes = new Map();
+const rawEncryptedStorage = new Map(); // Raw persistent storage holding encrypted quiz data (CSQ-SR-003)
 const attempts = new Map();
 const questionBank = new Map();
 
@@ -71,19 +74,126 @@ function seedQuestionBank() {
     },
   ];
 
-  sampleQuestions.forEach((q) => questionBank.set(q.id, { ...q }));
+  sampleQuestions.forEach((q) =>
+    questionBank.set(q.id, {
+      ...q,
+      version: 1,
+      history: [
+        {
+          version: 1,
+          modifiedAt: Date.now(),
+          prompt: q.prompt,
+          options: q.options ? [...q.options] : undefined,
+          correctAnswer: q.correctAnswer,
+          points: q.points,
+        },
+      ],
+    })
+  );
 }
 
 seedQuestionBank();
 
+function updateBankQuestion(id, updates, user) {
+  const existing = questionBank.get(id);
+  if (!existing) return null;
+
+  const currentVersion = existing.version || 1;
+  const history = Array.isArray(existing.history) ? [...existing.history] : [];
+
+  history.push({
+    version: currentVersion,
+    modifiedAt: existing.updatedAt || existing.createdAt || Date.now(),
+    modifiedBy: existing.updatedBy || existing.createdBy || "system",
+    prompt: existing.prompt,
+    options: existing.options ? [...existing.options] : undefined,
+    correctAnswer: existing.correctAnswer,
+    points: existing.points,
+  });
+
+  const updated = {
+    ...existing,
+    ...updates,
+    id: existing.id,
+    type: updates.type || existing.type,
+    version: currentVersion + 1,
+    history,
+    updatedAt: Date.now(),
+    updatedBy: user ? user.id : "system",
+  };
+
+  questionBank.set(id, updated);
+  return updated;
+}
+
+function reuseBankQuestion(id, overrides = {}) {
+  const original = questionBank.get(id);
+  if (!original) return null;
+
+  // Deep copy so changes never leak to original
+  const copy = {
+    id: overrides.id || `reused-${original.id}-${Date.now()}`,
+    fromBankId: original.id,
+    bankVersion: original.version || 1,
+    type: overrides.type || original.type,
+    prompt: overrides.prompt || original.prompt,
+    options: overrides.options
+      ? [...overrides.options]
+      : original.options
+      ? [...original.options]
+      : undefined,
+    correctAnswer:
+      overrides.correctAnswer !== undefined
+        ? overrides.correctAnswer
+        : original.correctAnswer,
+    points: overrides.points !== undefined ? Number(overrides.points) : original.points || 1,
+    difficulty: overrides.difficulty || original.difficulty || "medium",
+    topic: overrides.topic || original.topic || "General",
+  };
+
+  return copy;
+}
+
 function resetQuizStore() {
   quizzes.clear();
+  rawEncryptedStorage.clear();
   attempts.clear();
   seedQuestionBank();
 }
 
 function registerQuiz(quizId, quiz) {
+  // Store transparently in active cache
   quizzes.set(quizId, quiz);
+
+  // Store encrypted at rest in raw storage (CSQ-SR-003)
+  if (Array.isArray(quiz.questions)) {
+    const encryptedQuestions = encryptObject(quiz.questions);
+    const { questions, ...rest } = quiz;
+    rawEncryptedStorage.set(quizId, {
+      ...rest,
+      encryptedData: encryptedQuestions,
+      encryptionAlgorithm: "aes-256-gcm",
+    });
+  } else {
+    rawEncryptedStorage.set(quizId, { ...quiz });
+  }
+}
+
+function getRawStorage(quizId) {
+  return rawEncryptedStorage.get(quizId);
+}
+
+function decryptStoredQuiz(quizId) {
+  const raw = rawEncryptedStorage.get(quizId);
+  if (!raw) return null;
+  if (!raw.encryptedData) return raw;
+
+  const decryptedQuestions = decryptObject(raw.encryptedData);
+  const { encryptedData, encryptionAlgorithm, ...rest } = raw;
+  return {
+    ...rest,
+    questions: decryptedQuestions,
+  };
 }
 
 function getQuiz(quizId) {
@@ -96,11 +206,16 @@ function deleteQuiz(quizId) {
 
 module.exports = {
   quizzes,
+  rawEncryptedStorage,
   attempts,
   questionBank,
   registerQuiz,
   getQuiz,
+  getRawStorage,
+  decryptStoredQuiz,
   deleteQuiz,
+  updateBankQuestion,
+  reuseBankQuestion,
   resetQuizStore,
   seedQuestionBank,
 };

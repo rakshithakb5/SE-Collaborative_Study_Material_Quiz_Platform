@@ -6,6 +6,7 @@ import QuizPlayer from './pages/QuizPlayer.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
 import AdminPanel from './pages/AdminPanel.jsx';
+import NotificationCenter from './pages/NotificationCenter.jsx';
 
 const initialQuizzes = [
   {
@@ -75,7 +76,10 @@ function App() {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '1200px', margin: '0 auto' }}>
-      <h1>SE Collaborative Platform</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ margin: 0 }}>SE Collaborative Platform</h1>
+        <NotificationCenter />
+      </div>
       <hr />
       <Login />
       <hr />
