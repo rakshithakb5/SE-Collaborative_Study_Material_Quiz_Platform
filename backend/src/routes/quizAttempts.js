@@ -3,9 +3,12 @@ const { requireRole } = require("../middleware/rbac");
 const { recordActivity } = require("../services/auditLog");
 const {
   quizzes,
+  rawEncryptedStorage,
   attempts,
   questionBank,
   registerQuiz,
+  getRawStorage,
+  decryptStoredQuiz,
   resetQuizStore,
 } = require("../models/quizStore");
 
@@ -218,7 +221,7 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
     updatedAt: Date.now(),
   };
 
-  quizzes.set(quizId, newQuiz);
+  registerQuiz(quizId, newQuiz);
 
   return res.status(201).json({ quiz: newQuiz });
 });
@@ -342,7 +345,7 @@ router.put("/:quizId", requireRole("instructor", "admin"), (req, res) => {
   }
 
   existing.updatedAt = Date.now();
-  quizzes.set(quizId, existing);
+  registerQuiz(quizId, existing);
 
   return res.status(200).json({ quiz: existing });
 });
@@ -379,7 +382,7 @@ router.post("/:quizId/publish", requireRole("instructor", "admin"), (req, res) =
   quiz.status = "published";
   quiz.published = true;
   quiz.updatedAt = Date.now();
-  quizzes.set(quizId, quiz);
+  registerQuiz(quizId, quiz);
 
   return res.status(200).json({ quiz });
 });
@@ -669,6 +672,8 @@ function getActiveAttemptCount(quizId) {
 module.exports = {
   router,
   registerQuiz,
+  getRawStorage,
+  decryptStoredQuiz,
   resetQuizAttemptData,
   getActiveAttemptCount,
 };
