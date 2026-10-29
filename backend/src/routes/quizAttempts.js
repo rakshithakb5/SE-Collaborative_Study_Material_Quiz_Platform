@@ -388,6 +388,53 @@ router.post("/:quizId/publish", requireRole("instructor", "admin"), (req, res) =
   return res.status(200).json({ quiz });
 });
 
+// POST /api/quizzes/:quizId/flag - Report a quiz for admin moderation (CSQ-F-061)
+router.post(
+  "/:quizId/flag",
+  requireRole("student", "instructor", "admin"),
+  (req, res) => {
+    const { quizId } = req.params;
+    const quiz = quizzes.get(quizId);
+    if (!quiz) {
+      return res.status(404).json({ error: "Quiz not found" });
+    }
+
+    const { reason } = req.body || {};
+    if (typeof reason !== "string" || !reason.trim()) {
+      return res
+        .status(400)
+        .json({ error: "A reason is required to flag content" });
+    }
+
+    if (!Array.isArray(quiz.userFlags)) {
+      quiz.userFlags = [];
+    }
+
+    const flagEntry = {
+      flagId: `flag-q-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      userId: req.user.id,
+      userRole: req.user.role,
+      reason: reason.trim(),
+      flaggedAt: Date.now(),
+    };
+
+    quiz.userFlags.push(flagEntry);
+    quiz.isUserFlagged = true;
+
+    recordActivity(
+      req.user,
+      "content.flag",
+      `quiz:${quizId}`,
+      `Quiz flagged: ${reason.trim()}`
+    );
+
+    return res.status(200).json({
+      message: "Quiz flagged for admin moderation review",
+      flag: flagEntry,
+    });
+  }
+);
+
 // Start a quiz attempt (CSQ-F-021: enforces settings during attempt)
 router.post("/:quizId/attempts", requireRole("student"), (req, res) => {
   const { quizId } = req.params;
@@ -671,11 +718,27 @@ function getActiveAttemptCount(quizId) {
   return count;
 }
 
+function listUserFlaggedQuizzes() {
+  return Array.from(quizzes.values()).filter(
+    (q) => Array.isArray(q.userFlags) && q.userFlags.length > 0
+  );
+}
+
+function dismissQuizFlag(quizId) {
+  const quiz = quizzes.get(quizId);
+  if (!quiz) return null;
+  quiz.userFlags = [];
+  quiz.isUserFlagged = false;
+  return quiz;
+}
+
 module.exports = {
   router,
   registerQuiz,
   getRawStorage,
   decryptStoredQuiz,
+  listUserFlaggedQuizzes,
+  dismissQuizFlag,
   resetQuizAttemptData,
   getActiveAttemptCount,
 };
