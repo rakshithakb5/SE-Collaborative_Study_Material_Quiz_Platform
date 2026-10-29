@@ -71,10 +71,85 @@ function seedQuestionBank() {
     },
   ];
 
-  sampleQuestions.forEach((q) => questionBank.set(q.id, { ...q }));
+  sampleQuestions.forEach((q) =>
+    questionBank.set(q.id, {
+      ...q,
+      version: 1,
+      history: [
+        {
+          version: 1,
+          modifiedAt: Date.now(),
+          prompt: q.prompt,
+          options: q.options ? [...q.options] : undefined,
+          correctAnswer: q.correctAnswer,
+          points: q.points,
+        },
+      ],
+    })
+  );
 }
 
 seedQuestionBank();
+
+function updateBankQuestion(id, updates, user) {
+  const existing = questionBank.get(id);
+  if (!existing) return null;
+
+  const currentVersion = existing.version || 1;
+  const history = Array.isArray(existing.history) ? [...existing.history] : [];
+
+  history.push({
+    version: currentVersion,
+    modifiedAt: existing.updatedAt || existing.createdAt || Date.now(),
+    modifiedBy: existing.updatedBy || existing.createdBy || "system",
+    prompt: existing.prompt,
+    options: existing.options ? [...existing.options] : undefined,
+    correctAnswer: existing.correctAnswer,
+    points: existing.points,
+  });
+
+  const updated = {
+    ...existing,
+    ...updates,
+    id: existing.id,
+    type: updates.type || existing.type,
+    version: currentVersion + 1,
+    history,
+    updatedAt: Date.now(),
+    updatedBy: user ? user.id : "system",
+  };
+
+  questionBank.set(id, updated);
+  return updated;
+}
+
+function reuseBankQuestion(id, overrides = {}) {
+  const original = questionBank.get(id);
+  if (!original) return null;
+
+  // Deep copy so changes never leak to original
+  const copy = {
+    id: overrides.id || `reused-${original.id}-${Date.now()}`,
+    fromBankId: original.id,
+    bankVersion: original.version || 1,
+    type: overrides.type || original.type,
+    prompt: overrides.prompt || original.prompt,
+    options: overrides.options
+      ? [...overrides.options]
+      : original.options
+      ? [...original.options]
+      : undefined,
+    correctAnswer:
+      overrides.correctAnswer !== undefined
+        ? overrides.correctAnswer
+        : original.correctAnswer,
+    points: overrides.points !== undefined ? Number(overrides.points) : original.points || 1,
+    difficulty: overrides.difficulty || original.difficulty || "medium",
+    topic: overrides.topic || original.topic || "General",
+  };
+
+  return copy;
+}
 
 function resetQuizStore() {
   quizzes.clear();
@@ -101,6 +176,8 @@ module.exports = {
   registerQuiz,
   getQuiz,
   deleteQuiz,
+  updateBankQuestion,
+  reuseBankQuestion,
   resetQuizStore,
   seedQuestionBank,
 };
