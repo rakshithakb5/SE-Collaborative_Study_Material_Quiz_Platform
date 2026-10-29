@@ -366,6 +366,11 @@ export default function QuizPlayer({ availableQuizzes = [] }) {
                           {' | '}
                           Points: {res.pointsAwarded}/{res.maxPoints}
                         </p>
+                        {res.explanation && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#555' }}>
+                            <em>Explanation: {res.explanation}</em>
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
