@@ -407,11 +407,19 @@ router.post(
             question.correctAnswer.trim().toLowerCase();
       }
 
+      const explanation =
+        question.explanation ||
+        (isCorrect
+          ? "Correct answer submitted."
+          : `Expected: ${question.correctAnswer}.`);
+
       return {
         questionId: question.id,
         isCorrect,
         pointsAwarded: isCorrect ? question.points ?? 1 : 0,
         maxPoints: question.points ?? 1,
+        correctAnswer: question.correctAnswer,
+        explanation,
       };
     });
 
