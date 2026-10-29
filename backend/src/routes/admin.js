@@ -21,6 +21,7 @@ const {
 const {
   listUserFlaggedQuizzes,
   dismissQuizFlag,
+  removeQuiz,
 } = require("./quizAttempts");
 const { runRetention } = require("../services/retentionJob");
 
@@ -117,6 +118,18 @@ router.post("/materials/:id/remove", requireRole("admin"), (req, res) => {
 
   recordAuditEvent({ actor: actorOf(req), action: "content.remove", target: `material:${material.id}`, reason });
   return res.status(200).json({ removed: true, materialId: material.id });
+});
+
+// POST /api/admin/quizzes/:id/remove   { reason }
+router.post("/quizzes/:id/remove", requireRole("admin"), (req, res) => {
+  const reason = requireReason(req, res);
+  if (!reason) return;
+
+  const quiz = removeQuiz(req.params.id);
+  if (!quiz) return res.status(404).json({ error: "Quiz not found" });
+
+  recordAuditEvent({ actor: actorOf(req), action: "content.remove", target: `quiz:${quiz.id}`, reason });
+  return res.status(200).json({ removed: true, quizId: quiz.id });
 });
 
 // GET /api/admin/materials/review-queue

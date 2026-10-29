@@ -732,6 +732,13 @@ function dismissQuizFlag(quizId) {
   return quiz;
 }
 
+function removeQuiz(quizId) {
+  const quiz = quizzes.get(quizId);
+  if (!quiz) return null;
+  quizzes.delete(quizId);
+  return quiz;
+}
+
 module.exports = {
   router,
   registerQuiz,
@@ -739,6 +746,7 @@ module.exports = {
   decryptStoredQuiz,
   listUserFlaggedQuizzes,
   dismissQuizFlag,
+  removeQuiz,
   resetQuizAttemptData,
   getActiveAttemptCount,
 };
