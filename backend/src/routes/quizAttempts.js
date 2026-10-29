@@ -141,6 +141,21 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
   const shuffle = Boolean(settings.shuffle);
   const difficulty = settings.difficulty || "medium";
 
+  const targetGroups = Array.isArray(req.body.targetGroups)
+    ? req.body.targetGroups
+    : [];
+  const availabilityWindow =
+    req.body.availabilityWindow && typeof req.body.availabilityWindow === "object"
+      ? {
+          start: req.body.availabilityWindow.start
+            ? new Date(req.body.availabilityWindow.start).toISOString()
+            : null,
+          end: req.body.availabilityWindow.end
+            ? new Date(req.body.availabilityWindow.end).toISOString()
+            : null,
+        }
+      : null;
+
   const quizId = customId || `quiz-${Date.now()}`;
   const isPublished = status === "published";
 
@@ -155,6 +170,8 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
     maxAttempts,
     shuffle,
     difficulty,
+    targetGroups,
+    availabilityWindow,
     settings: {
       timeLimitSeconds,
       maxAttempts,
@@ -250,6 +267,24 @@ router.put("/:quizId", requireRole("instructor", "admin"), (req, res) => {
 
   if (Array.isArray(questions)) {
     existing.questions = questions;
+  }
+
+  if (Array.isArray(req.body.targetGroups)) {
+    existing.targetGroups = req.body.targetGroups;
+  }
+
+  if (req.body.availabilityWindow !== undefined) {
+    existing.availabilityWindow =
+      req.body.availabilityWindow && typeof req.body.availabilityWindow === "object"
+        ? {
+            start: req.body.availabilityWindow.start
+              ? new Date(req.body.availabilityWindow.start).toISOString()
+              : null,
+            end: req.body.availabilityWindow.end
+              ? new Date(req.body.availabilityWindow.end).toISOString()
+              : null,
+          }
+        : null;
   }
 
   existing.updatedAt = Date.now();
