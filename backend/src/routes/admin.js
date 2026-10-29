@@ -11,7 +11,17 @@ const { getAuditLog, verifyChain, recordAuditEvent } = require("../services/audi
 const { findById, listUsers, setStatus } = require("../models/userStore");
 const { publicUser } = require("./auth");
 const { sendWarning } = require("../services/notifier");
-const { removeMaterial, getMaterial, listForReview } = require("./materials");
+const {
+  removeMaterial,
+  getMaterial,
+  listForReview,
+  listUserFlaggedMaterials,
+  dismissMaterialFlag,
+} = require("./materials");
+const {
+  listUserFlaggedQuizzes,
+  dismissQuizFlag,
+} = require("./quizAttempts");
 const { runRetention } = require("../services/retentionJob");
 
 const router = express.Router();
@@ -110,9 +120,9 @@ router.post("/materials/:id/remove", requireRole("admin"), (req, res) => {
 });
 
 // GET /api/admin/materials/review-queue
-// Material held back by the plagiarism check (flagged, or scan unavailable).
+// Material held back by the plagiarism check or user flags
 router.get("/materials/review-queue", requireRole("admin"), (req, res) => {
-  const items = listForReview().map((m) => ({
+  const plagiarismItems = listForReview().map((m) => ({
     materialId: m.id,
     title: m.title,
     status: m.status,
@@ -122,8 +132,105 @@ router.get("/materials/review-queue", requireRole("admin"), (req, res) => {
         ? `Similarity ${Math.round(m.scan.similarity * 100)}% is above the threshold`
         : "Plagiarism scan unavailable - manual review needed",
     scan: m.scan,
+    createdAt: m.createdAt,
   }));
+
+  const userFlaggedItems = listUserFlaggedMaterials().map((m) => ({
+    materialId: m.id,
+    title: m.title,
+    status: m.status,
+    source: "user-report",
+    reason: m.userFlags.map((f) => f.reason).join("; "),
+    flags: m.userFlags,
+    flagCount: m.userFlags.length,
+    createdAt: m.userFlags[m.userFlags.length - 1].flaggedAt,
+  }));
+
+  const items = [...plagiarismItems, ...userFlaggedItems];
   res.status(200).json({ count: items.length, items });
+});
+
+// GET /api/admin/moderation-queue - Unified moderation queue (CSQ-F-061)
+router.get("/moderation-queue", requireRole("admin"), (req, res) => {
+  const plagiarismItems = listForReview().map((m) => ({
+    id: m.id,
+    contentType: "material",
+    title: m.title,
+    status: m.status,
+    source: "plagiarism-service",
+    reason:
+      m.status === "flagged"
+        ? `Similarity ${Math.round(m.scan.similarity * 100)}% is above the threshold`
+        : "Plagiarism scan unavailable - manual review needed",
+    scan: m.scan,
+    timestamp: m.createdAt || Date.now(),
+  }));
+
+  const userFlaggedMaterials = listUserFlaggedMaterials().map((m) => ({
+    id: m.id,
+    contentType: "material",
+    title: m.title,
+    status: m.status,
+    source: "user-report",
+    reason: m.userFlags.map((f) => f.reason).join("; "),
+    flags: m.userFlags,
+    flagCount: m.userFlags.length,
+    timestamp: m.userFlags[m.userFlags.length - 1].flaggedAt,
+  }));
+
+  const userFlaggedQuizzes = listUserFlaggedQuizzes().map((q) => ({
+    id: q.id,
+    contentType: "quiz",
+    title: q.title,
+    status: q.status,
+    source: "user-report",
+    reason: q.userFlags.map((f) => f.reason).join("; "),
+    flags: q.userFlags,
+    flagCount: q.userFlags.length,
+    timestamp: q.userFlags[q.userFlags.length - 1].flaggedAt,
+  }));
+
+  const items = [...plagiarismItems, ...userFlaggedMaterials, ...userFlaggedQuizzes].sort(
+    (a, b) => (b.timestamp || 0) - (a.timestamp || 0)
+  );
+
+  return res.status(200).json({ count: items.length, queue: items });
+});
+
+// POST /api/admin/moderation-queue/materials/:id/dismiss - Dismiss user flags on material
+router.post("/moderation-queue/materials/:id/dismiss", requireRole("admin"), (req, res) => {
+  const reason = requireReason(req, res);
+  if (!reason) return;
+
+  const dismissed = dismissMaterialFlag(req.params.id);
+  if (!dismissed) return res.status(404).json({ error: "Material not found" });
+
+  recordAuditEvent({
+    actor: actorOf(req),
+    action: "content.dismiss_flag",
+    target: `material:${req.params.id}`,
+    reason,
+  });
+
+  return res.status(200).json({ dismissed: true, materialId: req.params.id });
+});
+
+// POST /api/admin/moderation-queue/quizzes/:id/dismiss - Dismiss user flags on quiz
+router.post("/moderation-queue/quizzes/:id/dismiss", requireRole("admin"), (req, res) => {
+  const reason = requireReason(req, res);
+  if (!reason) return;
+
+  const dismissed = dismissQuizFlag(req.params.id);
+  if (!dismissed) return res.status(404).json({ error: "Quiz not found" });
+
+  recordAuditEvent({
+    actor: actorOf(req),
+    action: "content.dismiss_flag",
+    target: `quiz:${req.params.id}`,
+    reason,
+  });
+
+  return res.status(200).json({ dismissed: true, quizId: req.params.id });
 });
 
 // POST /api/admin/materials/:id/approve   { reason }  -> publish after review
