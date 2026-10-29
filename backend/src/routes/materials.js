@@ -3,6 +3,7 @@ const crypto = require("node:crypto");
 const { requireRole } = require("../middleware/rbac");
 const { scanDocument } = require("../services/plagiarismService");
 const { recordActivity } = require("../services/auditLog");
+const { notifyNewMaterial } = require("../services/notifier");
 
 const router = express.Router();
 const materials = new Map();
@@ -130,6 +131,9 @@ createMaterial(id, { title: title.trim(), content });
 
   const material = materials.get(id);
   await screenMaterial(material, content);
+  if (material.status === "published") {
+    notifyNewMaterial(material);
+  }
   recordActivity(
     req.user,
     "material.upload",

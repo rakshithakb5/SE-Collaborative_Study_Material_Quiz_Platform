@@ -1,6 +1,7 @@
 const express = require("express");
 const { requireRole } = require("../middleware/rbac");
 const { recordActivity } = require("../services/auditLog");
+const { notifyGradePublished } = require("../services/notifier");
 const {
   quizzes,
   rawEncryptedStorage,
@@ -591,6 +592,7 @@ router.post(
     attempt.score = score;
     attempt.maxScore = maxScore;
     attempt.results = results;
+    notifyGradePublished(attempt, quiz, req.user.email || req.user.id);
     recordActivity(req.user, "quiz.attempt.submit", `quiz:${attempt.quizId}`, "Quiz attempt submitted");
 
     return res.status(200).json({ attempt });
