@@ -293,6 +293,43 @@ router.put("/:quizId", requireRole("instructor", "admin"), (req, res) => {
   return res.status(200).json({ quiz: existing });
 });
 
+// POST /api/quizzes/:quizId/publish - Publish quiz to specific groups with availability window (CSQ-F-022)
+router.post("/:quizId/publish", requireRole("instructor", "admin"), (req, res) => {
+  const { quizId } = req.params;
+  const quiz = quizzes.get(quizId);
+
+  if (!quiz) {
+    return res.status(404).json({ error: "Quiz not found" });
+  }
+
+  const { targetGroups, availabilityWindow } = req.body;
+
+  if (Array.isArray(targetGroups)) {
+    quiz.targetGroups = targetGroups;
+  }
+
+  if (availabilityWindow !== undefined) {
+    quiz.availabilityWindow =
+      availabilityWindow && typeof availabilityWindow === "object"
+        ? {
+            start: availabilityWindow.start
+              ? new Date(availabilityWindow.start).toISOString()
+              : null,
+            end: availabilityWindow.end
+              ? new Date(availabilityWindow.end).toISOString()
+              : null,
+          }
+        : null;
+  }
+
+  quiz.status = "published";
+  quiz.published = true;
+  quiz.updatedAt = Date.now();
+  quizzes.set(quizId, quiz);
+
+  return res.status(200).json({ quiz });
+});
+
 // Start a quiz attempt (CSQ-F-021: enforces settings during attempt)
 router.post("/:quizId/attempts", requireRole("student"), (req, res) => {
   const { quizId } = req.params;
