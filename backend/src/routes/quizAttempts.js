@@ -143,15 +143,23 @@ router.post("/", requireRole("instructor", "admin"), (req, res) => {
       }
     }
 
+    const bankItem = q.fromBankId ? questionBank.get(q.fromBankId) : null;
+    const bankVersion = q.bankVersion || (bankItem ? bankItem.version || 1 : undefined);
+
     normalizedQuestions.push({
       id: qId,
       type: qType,
       prompt: qPrompt,
-      options: q.options || (qType === "true_false" ? [true, false] : undefined),
+      options: Array.isArray(q.options)
+        ? [...q.options]
+        : qType === "true_false"
+        ? [true, false]
+        : undefined,
       correctAnswer: q.correctAnswer,
       points: q.points !== undefined ? Number(q.points) : 1,
       fromBankId: q.fromBankId || undefined,
-      difficulty: q.difficulty || "medium",
+      bankVersion,
+      difficulty: q.difficulty || (bankItem ? bankItem.difficulty : "medium"),
     });
   }
 
