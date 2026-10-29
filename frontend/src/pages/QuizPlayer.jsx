@@ -194,6 +194,21 @@ export default function QuizPlayer({ availableQuizzes = [] }) {
                     </div>
                   </div>
 
+                  {/* Target Groups & Window info */}
+                  {(currentQuiz.targetGroups?.length > 0 || currentQuiz.availabilityWindow) && (
+                    <div style={{ marginTop: '8px', padding: '6px 10px', background: '#e8f4f8', borderRadius: '4px', fontSize: '12px', color: '#1a5276' }}>
+                      {currentQuiz.targetGroups?.length > 0 && (
+                        <span><strong>Assigned Groups:</strong> {currentQuiz.targetGroups.join(', ')} </span>
+                      )}
+                      {currentQuiz.availabilityWindow?.start && (
+                        <span>| <strong>Starts:</strong> {new Date(currentQuiz.availabilityWindow.start).toLocaleString()} </span>
+                      )}
+                      {currentQuiz.availabilityWindow?.end && (
+                        <span>| <strong>Ends:</strong> {new Date(currentQuiz.availabilityWindow.end).toLocaleString()}</span>
+                      )}
+                    </div>
+                  )}
+
                   <div style={{ marginTop: '15px' }}>
                     <button
                       onClick={handleStartAttempt}
