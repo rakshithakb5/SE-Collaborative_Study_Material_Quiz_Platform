@@ -1,0 +1,28 @@
+
+config:
+  target: "http://localhost:5001"
+  processor: "./load-processor.js"
+  phases:
+    - duration: 50
+      arrivalRate: 100
+      name: "Create 5000 active attempts"
+  defaults:
+    headers:
+      Content-Type: "application/json"
+  ensure:
+    thresholds:
+      - "http.response_time.p95": 3000
+    conditions:
+      - expression: "vusers.completed >= 5000"
+
+scenarios:
+  - name: "Keep quiz attempt active"
+    flow:
+      - function: "generateUniqueUser"
+      - post:
+          url: "/api/quizzes/performance-quiz/attempts"
+          json:
+            userId: "{{ userId }}"
+          expect:
+            - statusCode: 201
+      - think: 60
