@@ -1,0 +1,33 @@
+# Accessibility Test Report
+
+**Test ID:** CSQ-NF-ACCESSIBILITY  
+**Standard:** WCAG 2.1 Level AA  
+**Tool:** Playwright + axe-core  
+**Result:** PASS
+
+## Scope
+
+Accessibility validation was performed on the following application pages:
+
+| Page | Violations | Result |
+|---|---:|---|
+| Dashboard | 0 | PASS |
+| Study Library | 0 | PASS |
+| Quiz Center | 0 | PASS |
+
+## Validation Method
+
+The application was tested using axe-core with the following tags:
+
+- wcag2a
+- wcag2aa
+- wcag21a
+- wcag21aa
+
+The test checked for accessibility violations, including insufficient colour contrast.
+
+## Conclusion
+
+All three tested pages passed the accessibility scan with zero reported violations.
+
+**Evidence:** `accessibility-test-output.txt`
