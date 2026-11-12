@@ -1,0 +1,5 @@
+@import './App.css';
+:root { font-family: 'DM Sans', system-ui, sans-serif; color: #252a3d; background: #f6f7fc; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input, select { font: inherit; }
