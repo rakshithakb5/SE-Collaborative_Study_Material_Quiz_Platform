@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+frontend/dist/
+.DS_Store
+coverage/
+**/coverage/tmp/
+frontend/test-results/
+__MACOSX/
